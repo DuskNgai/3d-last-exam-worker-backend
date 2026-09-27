@@ -1,0 +1,41 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: UTC
+  network:
+    version: 2
+    ethernets:
+      all:
+        match:
+          name: e*
+        dhcp4: true
+  identity:
+    hostname: sandbox-base
+    realname: Sandbox Admin
+    username: sandboxadm
+    password: "__ADMIN_HASH__"
+  ssh:
+    install-server: false
+    allow-pw: false
+  codecs:
+    install: false
+  drivers:
+    install: false
+  storage:
+    layout:
+      name: direct
+  packages:
+    - qemu-guest-agent
+  late-commands:
+    - curtin in-target -- useradd --create-home --uid 1001 --shell /bin/bash agent
+    - curtin in-target -- passwd -l agent
+    - printf '[daemon]\nAutomaticLoginEnable=true\nAutomaticLogin=agent\n' > /target/etc/gdm3/custom.conf
+    - curtin in-target -- systemctl enable qemu-guest-agent.service
+    - mkdir -p /target/home/agent/.config
+    - touch /target/home/agent/.config/gnome-initial-setup-done
+    - chown -R 1001:1001 /target/home/agent/.config
+    - touch /target/etc/cloud/cloud-init.disabled
+  shutdown: poweroff

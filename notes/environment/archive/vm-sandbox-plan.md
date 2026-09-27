@@ -2,7 +2,9 @@
 
 ## Status and Scope
 
-用户已授权开始搭建。Ubuntu 24.04.5 Desktop 已安装，open-vm-tools 与 desktop 组件已补装。无网卡情况下，已实测宿主机传入脚本、Guest 执行和输出取回；公网访问失败。Codex CLI 0.156.1 已在独立无网卡克隆中离线安装；普通 agent 用户的版本命令与 exec 帮助验证通过。Python 3.11.16 与 MuJoCo 3.3.7 已完成 Guest 内离线部署，自由落体、EGL 离屏渲染和桌面 viewer 均验证通过。统一部署入口见 [VM Deployment](vm-deployment.md)。模型连接和正式求解尚未开始。
+2026-09-27：本文已被 QEMU/KVM 沙盒方案取代，后端由 VMware Workstation 切换为 QEMU/KVM。以下内容保留为 VMware 原型的历史记录与验证证据，不再作为当前方案的实施依据。
+
+用户已授权开始搭建。Ubuntu 24.04.5 Desktop 已安装，open-vm-tools 与 desktop 组件已补装。无网卡情况下，已实测宿主机传入脚本、Guest 执行和输出取回；公网访问失败。Codex CLI 0.156.1 已在独立无网卡克隆中离线安装；普通 agent 用户的版本命令与 exec 帮助验证通过。Python 3.11.16 与 MuJoCo 3.14.0 已完成 Guest 内离线部署，自由落体、EGL 离屏渲染和桌面 viewer 均验证通过。统一部署入口见 [VM Deployment](vm-deployment.md)。模型连接和正式求解尚未开始。
 
 目标是让新的 Agent 在独立 Linux VM 中读取任务、编写代码、运行 MuJoCo，并交付可取回的 output。历史解法、开发 archive 和宿主机仓库不进入 VM。
 
@@ -75,7 +77,7 @@ Agent 使用无 sudo 的普通用户。允许在可写目录写代码或创建�
 | 部署层 | 内容 | 安装目标 |
 | --- | --- | --- |
 | Harness | 固定版本 Codex CLI 分发包与必要依赖 | VM 内独立工具目录，启动入口加入 Agent 的 PATH |
-| Software | Python 3.11.16 安装材料、MuJoCo 3.3.7 及锁定依赖 | /task/software/python/，保留现有软件目录约定 |
+| Software | Python 3.11.16 安装材料、MuJoCo 3.14.0 及锁定依赖 | /task/software/python/，保留现有软件目录约定 |
 | Task | instruction、五个 OBJ、公开 runtime | /task/，output 初始为空 |
 
 部署包在匹配 Ubuntu 24.04 x86_64 的准备环境中制作，并在干净克隆中测试。包内包含安装材料、完整依赖、安装脚本、版本与 SHA-256 清单；不包含认证、历史对话、求解产物或宿主机缓存。离线安装所需系统包必须包含完整依赖，或明确列为基础镜像依赖，不能在安装阶段临时访问软件源。
@@ -169,7 +171,7 @@ local/
 | 虚拟化 | VMware 实际启动 Ubuntu 24.04 Desktop，记录 Guest 内核、Workstation 与 Tools 版本 |
 | 离线部署 | 从通用基础克隆出发，断网安装 Codex CLI 与任务软件，无需宿主机安装路径 |
 | Harness | 普通 Agent 用户可运行固定版本 Codex CLI，无宿主机认证或历史对话 |
-| 环境 | VM 内 Python 3.11.16、MuJoCo 3.3.7 可导入并执行物理步进 |
+| 环境 | VM 内 Python 3.11.16、MuJoCo 3.14.0 可导入并执行物理步进 |
 | 输入 | 五个 OBJ、instruction 和 runtime 与导入清单一致，无历史解法 |
 | 权限 | Agent 无 sudo；不能修改 input、instruction 和受保护的软件 |
 | 隔离 | 看不到宿主机仓库与 archive，无共享项目挂载 |

@@ -1,5 +1,7 @@
 # VM Deployment
 
+2026-09-27：本文已被 QEMU/KVM 沙盒方案取代，部署入口由 `src/sandbox/deploy.py`（QGA 版）与 `src/sandbox/agent_run.py` 接管。以下内容保留为 VMware 原型的历史记录与验证证据，不再作为实施依据。
+
 ## Entry Point
 
 统一入口为 `src/vm_sandbox/deploy.py`。从仓库根目录执行：
@@ -48,6 +50,6 @@ python src/vm_sandbox/deploy.py \
 
 ## Validation
 
-2026-09-25，统一入口在无网卡 Ubuntu 测试克隆中完成重复部署。Codex CLI 0.156.1、Python 3.11.16、MuJoCo 3.3.7 验证通过；自由落体运行 0.1 秒后高度为 0.9504595 米，EGL 生成 320 x 240 图像，桌面 viewer 完成 100 次刷新并正常关闭。
+2026-09-25，统一入口在无网卡 Ubuntu 测试克隆中完成重复部署。Codex CLI 0.156.1、Python 3.11.16、MuJoCo 3.14.0 验证通过；自由落体运行 0.1 秒后高度为 0.9504595 米，EGL 生成 320 x 240 图像，桌面 viewer 完成 100 次刷新并正常关闭。
 
 成功报告保存在 `artifacts/runs/deployments/3bb74094118a/`。首次独立安装已分别验证；统一入口本次验证的是重复部署。模型认证与推理尚未测试。

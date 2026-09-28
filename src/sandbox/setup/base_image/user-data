@@ -15,7 +15,7 @@ autoinstall:
   identity:
     hostname: sandbox-base
     realname: Sandbox Admin
-    username: sandboxadm
+    username: admin
     password: "__ADMIN_HASH__"
   ssh:
     install-server: false

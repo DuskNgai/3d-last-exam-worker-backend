@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import platform
-import secrets
 import shutil
 import subprocess
 import time
@@ -154,14 +153,8 @@ def _prepare_seed(config: BuildConfig, logger: logging.Logger) -> tuple[str, boo
         raise BuildError('failed to extract casper kernel/initrd')
 
     logger.info('== Prepare autoinstall seed ==')
-    admin_password = secrets.token_hex(16)
-    admin_hash = subprocess.run(['openssl', 'passwd', '-6', admin_password],
+    admin_hash = subprocess.run(['openssl', 'passwd', '-6', iso_sha256],
                                 capture_output=True, text=True, check=True).stdout.strip()
-    secret_file = config.out / 'admin-password.txt'
-    fd = os.open(secret_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, 'w') as stream:
-        stream.write(f'base image privileged user: sandboxadm\npassword: {admin_password}\n')
-    os.chmod(secret_file, 0o600)
     cidata = seed / 'cidata'
     template = (BASE_IMAGE_DIR / 'user-data').read_text()
     (cidata / 'user-data').write_text(template.replace('__ADMIN_HASH__', admin_hash))
@@ -246,7 +239,7 @@ def _verify_boot(config: BuildConfig, logger: logging.Logger) -> dict[str, objec
     kernel = client.run(['/bin/uname', '-r']).stdout.decode().strip()
     os_name = client.run(['/bin/sh', '-c', '. /etc/os-release; echo "$PRETTY_NAME"']).stdout.decode().strip()
     links = client.run(['/bin/sh', '-c', "ip -o link show | awk '{print $2}'"]).stdout.decode().split()
-    users = client.run(['/bin/sh', '-c', 'getent passwd 1001; id sandboxadm']).stdout.decode().strip()
+    users = client.run(['/bin/sh', '-c', 'getent passwd 1001; id admin']).stdout.decode().strip()
 
     desktop_deadline = time.monotonic() + DESKTOP_TIMEOUT
     while True:
@@ -327,9 +320,9 @@ def _write_manifest(config: BuildConfig, logger: logging.Logger, iso_sha256: str
         'guest_links': verify['links'],
         'build_time': datetime.datetime.now().isoformat(timespec='seconds'),
         'build_mode': 'autoinstall-unattended',
-        'guest': {'users': [{'name': 'sandboxadm', 'sudo': True}, {'name': 'agent', 'uid': 1001, 'sudo': False}],
+        'guest': {'users': [{'name': 'admin', 'sudo': True}, {'name': 'agent', 'uid': 1001, 'sudo': False}],
                   'services': ['qemu-guest-agent'], 'desktop': 'GNOME with GDM autologin as agent'},
-        'admin_password_file': 'admin-password.txt (mode 600, lives on vmstore, not committed)',
+        'admin_password': 'same as iso.sha256 (admin)',
     }
     (config.out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     logger.info('%s', json.dumps(manifest, indent=2))

@@ -6,7 +6,6 @@ QEMU are absolute because `-daemonize` changes the working directory to `/`.
 
 import json
 import os
-import shutil
 import signal
 import subprocess
 import time
@@ -15,15 +14,14 @@ from typing import Final
 
 from ..qga import QgaClient, QgaError, QmpClient
 
-VMSTORE: Final = Path(os.environ.get('VMSTORE', '/home/vrlab/vmstore'))
-DEFAULT_BASE_IMAGE: Final = VMSTORE / 'images/ubuntu-24.04.5-desktop-base/base.qcow2'
-DEFAULT_RUNS_ROOT: Final = VMSTORE / 'runs'
 OVERLAY_NAME: Final = 'overlay.qcow2'
 QGA_SOCKET_NAME: Final = 'qga.sock'
 QMP_SOCKET_NAME: Final = 'qmp.socket'
 SERIAL_LOG_NAME: Final = 'serial.log'
 PIDFILE_NAME: Final = 'vm.pid'
 CONFIG_NAME: Final = 'vm.json'
+GUESTFWD_ADDRESS: Final = '10.0.2.100'
+GUESTFWD_PORT: Final = 8443
 STOP_GRACE_SECONDS: Final = 60.0
 READY_TIMEOUT_SECONDS: Final = 300.0
 
@@ -53,7 +51,7 @@ def qmp_socket_path(run_dir: Path) -> Path:
     return run_dir.resolve() / QMP_SOCKET_NAME
 
 
-def create_overlay(run_dir: Path, base_image: Path = DEFAULT_BASE_IMAGE) -> Path:
+def create_overlay(run_dir: Path, base_image: Path) -> Path:
     """Create a qcow2 overlay backed by the frozen base image.
 
     `run_dir` (Path): Run directory, created if missing.
@@ -85,20 +83,34 @@ def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, networ
     run_dir = run_dir.resolve()
     command = [
         'qemu-system-x86_64',
-        '-machine', 'q35',
-        '-accel', accel,
-        '-cpu', 'host' if accel == 'kvm' else 'max',
-        '-smp', str(smp),
-        '-m', str(memory),
-        '-drive', f'file={overlay_path(run_dir)},if=virtio,format=qcow2',
-        '-device', 'virtio-gpu-pci',
-        '-display', 'none',
-        '-chardev', f'socket,path={qga_socket_path(run_dir)},server=on,wait=off,id=qga0',
-        '-device', 'virtio-serial',
-        '-device', 'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
-        '-qmp', f'unix:{qmp_socket_path(run_dir)},server=on,wait=off',
-        '-serial', f'file:{run_dir / SERIAL_LOG_NAME}',
-        '-pidfile', str(run_dir / PIDFILE_NAME),
+        '-machine',
+        'q35',
+        '-accel',
+        accel,
+        '-cpu',
+        'host' if accel == 'kvm' else 'max',
+        '-smp',
+        str(smp),
+        '-m',
+        str(memory),
+        '-drive',
+        f'file={overlay_path(run_dir)},if=virtio,format=qcow2',
+        '-device',
+        'virtio-gpu-pci',
+        '-display',
+        'none',
+        '-chardev',
+        f'socket,path={qga_socket_path(run_dir)},server=on,wait=off,id=qga0',
+        '-device',
+        'virtio-serial',
+        '-device',
+        'virtserialport,chardev=qga0,name=org.qemu.guest_agent.0',
+        '-qmp',
+        f'unix:{qmp_socket_path(run_dir)},server=on,wait=off',
+        '-serial',
+        f'file:{run_dir / SERIAL_LOG_NAME}',
+        '-pidfile',
+        str(run_dir / PIDFILE_NAME),
         '-no-reboot',
         '-daemonize',
     ]
@@ -107,40 +119,47 @@ def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, networ
     elif network == 'nat':
         command += ['-nic', 'user,model=virtio-net-pci']
     elif network == 'gateway':
-        if not relay_command:
-            raise VmError('gateway mode needs relay_command; guestfwd spawns it per guest connection')
-        if ',' in relay_command:
-            raise VmError('relay_command must not contain commas; QEMU netdev options are comma-separated')
-        command += [
-            '-netdev', f'user,id=net0,restrict=on,guestfwd=tcp:10.0.2.100:8443-cmd:{relay_command}',
-            '-device', 'virtio-net-pci,netdev=net0',
-        ]
+        netdev = 'user,id=net0,restrict=on'
+        if relay_command:
+            if ',' in relay_command:
+                raise VmError('relay_command must not contain commas; QEMU netdev options are comma-separated')
+            netdev += f',guestfwd=tcp:{GUESTFWD_ADDRESS}:{GUESTFWD_PORT}-cmd:{relay_command}'
+        command += ['-netdev', netdev, '-device', 'virtio-net-pci,netdev=net0']
     else:
         raise VmError(f'Unknown network mode: {network}')
     if vnc is not None:
-        command += ['-vnc', vnc]
+        # A bare `:N` makes QEMU listen on every interface with no password; keep it on loopback.
+        command += ['-vnc', f'127.0.0.1{vnc}' if vnc.startswith(':') else vnc]
     return command
 
 
-def start_vm(run_dir: Path, accel: str = 'kvm', smp: int = 4, memory: int = 16384,
-             network: str = 'none', vnc: str | None = None, relay_command: str | None = None) -> int:
+def start_vm(
+    run_dir: Path,
+    accel: str = 'kvm',
+    smp: int = 4,
+    memory: int = 16384,
+    network: str = 'gateway',
+    vnc: str | None = None,
+    relay_command: str | None = None
+) -> int:
     """Start a daemonized QEMU for an existing run directory overlay.
 
     `run_dir` (Path): Run directory holding the overlay.
     `accel` (str): `kvm` or `tcg`.
     `smp` (int): vCPU count.
     `memory` (int): RAM in MiB.
-    `network` (str): `none`, `nat`, or `gateway`; gateway isolates the guest and forwards
-        one address to relay_command, spawned per guest connection.
-    `vnc` (str | None): Optional VNC display such as `:5` for debugging.
-    `relay_command` (str | None): Command QEMU runs per forwarded guest connection; required
-        for gateway mode, must not contain commas.
+    `network` (str): `none`, `nat`, or `gateway`; gateway isolates the guest with restrict=on
+        and, when relay_command is given, forwards one address to it, spawned per guest connection.
+    `vnc` (str | None): Optional VNC display such as `:5` for debugging; a bare `:5` is pinned to
+        loopback, and an explicit host such as `0.0.0.0:5` is passed through as written.
+    `relay_command` (str | None): Command QEMU runs per forwarded guest connection; only used
+        in gateway mode, must not contain commas.
 
     Returns:
         int: The QEMU process pid.
 
     Raises:
-        VmError: The overlay is missing, the VM is already running, or QEMU failed to start.
+        VmError: The overlay is missing, the VM is already running, a relay_command is invalid, or QEMU failed to start.
     """
     run_dir = run_dir.resolve()
     if not overlay_path(run_dir).is_file():
@@ -156,8 +175,15 @@ def start_vm(run_dir: Path, accel: str = 'kvm', smp: int = 4, memory: int = 1638
     pid = read_pid(run_dir, wait=True)
     if pid is None:
         raise VmError('QEMU daemonized but no pidfile appeared')
-    config = {'accel': accel, 'smp': smp, 'memory': memory, 'network': network, 'vnc': vnc,
-              'relay_command': relay_command, 'pid': pid}
+    config = {
+        'accel': accel,
+        'smp': smp,
+        'memory': memory,
+        'network': network,
+        'vnc': vnc,
+        'relay_command': relay_command,
+        'pid': pid
+    }
     (run_dir / CONFIG_NAME).write_text(json.dumps(config, indent=2) + '\n')
     return pid
 
@@ -178,7 +204,7 @@ def read_pid(run_dir: Path, wait: bool = False) -> int | None:
         if pid is not None:
             try:
                 os.kill(pid, 0)
-            except ProcessLookupError:
+            except (ProcessLookupError, PermissionError):
                 return None
             return pid
         if not wait or time.monotonic() > deadline:
@@ -204,7 +230,7 @@ def wait_ready(run_dir: Path, timeout: float = READY_TIMEOUT_SECONDS) -> None:
         except (QgaError, OSError):
             pass
         if time.monotonic() > deadline:
-            raise VmError(f'Guest agent not ready after {timeout}s')
+            raise VmError(f'Guest agent not ready after {timeout}s; see {run_dir / SERIAL_LOG_NAME}')
         time.sleep(2.0)
 
 
@@ -254,12 +280,6 @@ def stop_vm(run_dir: Path, grace: float = STOP_GRACE_SECONDS) -> str:
     return 'kill'
 
 
-def destroy_run(run_dir: Path) -> None:
-    """Stop the VM if needed and delete the run directory."""
-    stop_vm(run_dir)
-    shutil.rmtree(run_dir.resolve())
-
-
 def vm_status(run_dir: Path) -> dict[str, object]:
     """Report pid, QMP runstate, and guest agent reachability.
 
@@ -267,7 +287,11 @@ def vm_status(run_dir: Path) -> dict[str, object]:
         dict: Keys `pid`, `runstate`, `qga`.
     """
     run_dir = run_dir.resolve()
-    status: dict = {'pid': read_pid(run_dir), 'runstate': None, 'qga': False}
+    status: dict = {
+        'pid': read_pid(run_dir),
+        'runstate': None,
+        'qga': False
+    }
     if status['pid'] is None:
         status['runstate'] = 'not running'
         return status

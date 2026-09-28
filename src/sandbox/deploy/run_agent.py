@@ -1,7 +1,7 @@
 """Run an agent task inside a gateway-mode VM and retrieve its logs.
 
 Flow: create an overlay VM, start the API relay on the host, deploy the software
-bundles, upload the task and the codex harness, run the agent non-interactively,
+bundles, install the selected harness, run the agent non-interactively,
 then retrieve every artifact it produced. The model key never enters the guest;
 completion is detected by polling the QGA exec session and cross-checked with an
 exitcode file the wrapper writes inside the guest.
@@ -19,21 +19,15 @@ from pathlib import Path
 from typing import Final
 
 from . import api_relay
-from . import deploy as deploy_module
 from .api_relay import load_env
+from .deploy import BundleConfig, DeployError, SCRIPTS_DIR, install_bundles
+from .guest import GuestError, write_file
+from .harness import GUESTFWD_BASE_URL, HarnessError, INSTALL_SCRIPT, distribution_dir, get_harness
 from ..qga import QgaClient, QgaError
-from .qemu_vm import DEFAULT_RUNS_ROOT, VmError, create_overlay, qga_socket_path, start_vm, stop_vm, vm_status, wait_ready
+from .qemu_vm import VmError, create_overlay, qga_socket_path, start_vm, stop_vm, vm_status, wait_ready
 
-DEFAULT_OUTPUT_ROOT: Final = Path('artifacts/runs/agent-runs')
-DEFAULT_DEPLOY_BUNDLES: Final = (
-    ('python', 'artifacts/tools/python', 'install_python.sh', False),
-    ('mujoco', 'artifacts/tools/mujoco', 'install_mujoco.sh', True),
-)
-CODEX_ARCHIVE: Final = Path('artifacts/harnesses/codex/0.156.1.tar.gz')
 DEFAULT_TIMEOUT: Final = 14400.0
 AGENT_POLL_INTERVAL: Final = 15.0
-UPLOAD_CHUNK_BYTES: Final = 67108864
-GUESTFWD_BASE_URL: Final = 'http://10.0.2.100:8443/v1'
 GATEWAY_CHECK_TIMEOUT: Final = 60.0
 
 END_COMPLETED: Final = 'completed'
@@ -44,39 +38,6 @@ END_ENV_FAILURE: Final = 'environment_failure'
 
 class AgentRunError(RuntimeError):
     """The run could not reach or finish the agent stage."""
-
-
-def _guest_tar_upload(qga: QgaClient, host_path: Path, guest_dir: str) -> None:
-    """Upload a local file into the guest in chunks and move it into place.
-
-    `qga` (QgaClient): Guest agent client.
-    `host_path` (Path): Local file to send.
-    `guest_dir` (str): Guest directory that receives the file under its basename.
-
-    Raises:
-        AgentRunError: The transfer or the guest-side placement failed.
-    """
-    result = qga.run(['/bin/bash', '-c', f'mkdir -p {guest_dir}'], timeout=30.0)
-    if result.exitcode != 0:
-        raise AgentRunError(f'guest dir setup failed for {guest_dir}: {result.stderr.decode()[:300]}')
-    data = host_path.read_bytes()
-    parts = (data[offset:offset + UPLOAD_CHUNK_BYTES] for offset in range(0, len(data), UPLOAD_CHUNK_BYTES))
-    try:
-        qga.upload_large(f'{guest_dir}/{host_path.name}', parts)
-    except (QgaError, TimeoutError) as error:
-        raise AgentRunError(f'upload failed for {host_path.name}: {error}') from error
-
-
-def _write_guest_file(qga: QgaClient, remote_path: str, content: str, mode: str = '644', owner: str | None = None) -> None:
-    """Write text to a guest file with mode and optional owner."""
-    qga.upload(remote_path, content.encode())
-    result = qga.run(['/bin/bash', '-c', f'chmod {mode} {remote_path}'], timeout=30.0)
-    if result.exitcode != 0:
-        raise AgentRunError(f'chmod failed for {remote_path}: {result.stderr.decode()[:300]}')
-    if owner:
-        result = qga.run(['/bin/bash', '-c', f'chown {owner} {remote_path}'], timeout=30.0)
-        if result.exitcode != 0:
-            raise AgentRunError(f'chown failed for {remote_path}: {result.stderr.decode()[:300]}')
 
 
 def _check_gateway(qga: QgaClient, attempts: int = 3) -> str:
@@ -92,7 +53,7 @@ def _check_gateway(qga: QgaClient, attempts: int = 3) -> str:
     """
     probe = (
         "python3 -c \"import urllib.request; "
-        "r = urllib.request.urlopen('http://10.0.2.100:8443/v1/models', timeout=20); "
+        f"r = urllib.request.urlopen('{GUESTFWD_BASE_URL}/models', timeout=20); "
         "print(r.status)\""
     )
     last_error = ''
@@ -106,41 +67,6 @@ def _check_gateway(qga: QgaClient, attempts: int = 3) -> str:
     raise AgentRunError(f'gateway probe failed after {attempts} attempts: {last_error}')
 
 
-def _codex_config(model: str, effort: str) -> str:
-    """Render the guest-side codex config that points at the guestfwd relay.
-
-    codex ignores OPENAI_BASE_URL; a custom model provider in config.toml is the
-    reliable route. `supports_websockets = false` keeps it on plain HTTPS SSE.
-    """
-    return f'''model = "{model}"
-model_reasoning_effort = "{effort}"
-model_provider = "relay"
-
-[model_providers.relay]
-name = "relay"
-base_url = "{GUESTFWD_BASE_URL}"
-env_key = "OPENAI_API_KEY"
-wire_api = "responses"
-supports_websockets = false
-'''
-
-
-def _agent_script() -> str:
-    """Render the guest-side agent wrapper script."""
-    return '''#!/bin/bash
-set -u
-mkdir -p /task/output
-export OPENAI_API_KEY=placeholder-managed-by-relay
-export PATH=/opt/codex/bin:$PATH
-cd /work
-codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check \\
-  --disable responses_websockets --disable responses_websockets_v2 \\
-  -C /work --json -o /task/output/last-message.txt "$(cat /task/instruction.md)" \\
-  < /dev/null > /task/output/agent-log.jsonl 2> /task/output/agent-stderr.log
-echo -n $? > /task/output/exitcode
-'''
-
-
 def _classify(agent_exited: bool, exitcode: int | None, timed_out: bool) -> str:
     """Map the run outcome to an end_reason value."""
     if timed_out:
@@ -150,6 +76,18 @@ def _classify(agent_exited: bool, exitcode: int | None, timed_out: bool) -> str:
     if exitcode == 0:
         return END_COMPLETED
     return END_HARNESS_ERROR
+
+
+def _parse_spec(spec: str) -> tuple[str, str]:
+    """Split one `<name>@<version>` spec, used for tools and for the harness.
+
+    Raises:
+        AgentRunError: The spec is missing its name or its version.
+    """
+    name, separator, version = spec.partition('@')
+    if not separator or not name or not version:
+        raise AgentRunError(f'spec must be <name>@<version>: {spec!r}')
+    return name, version
 
 
 def _scan_for_key(out_dir: Path, api_key: str) -> list[str]:
@@ -190,69 +128,109 @@ def _collect_output(qga: QgaClient, out_dir: Path) -> list[str]:
     return retrieved
 
 
-def run_agent(task_dir: Path, out_dir: Path, run_dir: Path, env_file: Path, timeout: float = DEFAULT_TIMEOUT,
-              smp: int = 4, memory: int = 16384, accel: str = 'kvm', keep_vm: bool = False) -> dict[str, object]:
+def run_agent(
+    task_dir: Path,
+    out_dir: Path,
+    run_dir: Path,
+    env_file: Path,
+    tools_root: Path,
+    tools: list[str],
+    harness_root: Path,
+    harness: str,
+    base_image: Path,
+    timeout: float = DEFAULT_TIMEOUT,
+    smp: int = 4,
+    memory: int = 16384,
+    accel: str = 'kvm',
+    vnc: str | None = None,
+    keep_vm: bool = False
+) -> dict[str, object]:
     """Execute one agent run end to end.
 
     `task_dir` (Path): Directory with instruction.md and an optional input/ subdirectory.
     `out_dir` (Path): Host directory that receives logs, artifacts, and the run summary.
     `run_dir` (Path): VM run directory on local storage.
     `env_file` (Path): The .env with MODEL, EFFORT, BASE_URL, API_KEY.
+    `tools_root` (Path): Directory of software bundles, organized as <name>/.
+    `tools` (list[str]): Tool specs as `<name>@<version>`, installed in order; each resolves to
+        tools_root/<name>/<version>/ and is installed by tools_root/<name>/install.sh.
+    `harness_root` (Path): Directory of harness distributions, organized as <name>/<version>/<vendor archive>.
+    `harness` (str): Harness spec as `<name>@<version>`; supported names are registered in
+        sandbox.deploy.harness.
+    `base_image` (Path): Frozen base qcow2 the overlay is created from.
     `timeout` (float): Wall-clock budget in seconds for the agent stage.
     `smp` (int): vCPU count.
     `memory` (int): RAM in MiB.
     `accel` (str): `kvm` or `tcg`.
+    `vnc` (str | None): Optional VNC display such as `:5` to watch the guest desktop live; a bare
+        `:5` is pinned to loopback by start_vm.
     `keep_vm` (bool): Keep the run directory after the run.
 
     Returns:
         dict[str, object]: The run summary, also written to out_dir/run-summary.json.
+
+    Raises:
+        AgentRunError: The env file is incomplete or a tools bundle is missing.
+        HarnessError: The harness is unsupported or its distribution directory is invalid.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     env = load_env(env_file.resolve())
     missing = [key for key in ('MODEL', 'EFFORT', 'BASE_URL', 'API_KEY') if not env.get(key)]
     if missing:
         raise AgentRunError(f'env file missing keys: {missing}')
-    summary: dict[str, object] = {'run_dir': str(run_dir), 'task_dir': str(task_dir), 'timeout': timeout,
-                     'started_at': datetime.datetime.now().isoformat(timespec='seconds'), 'end_reason': None}
+    harness_name, harness_version = _parse_spec(harness)
+    adapter = get_harness(harness_name)
+    harness_dir = distribution_dir(harness_root, harness_name, harness_version)
+    tool_specs = [_parse_spec(spec) for spec in tools]
+    for name, version in tool_specs:
+        bundle_dir = tools_root / name / version
+        if not bundle_dir.is_dir():
+            raise AgentRunError(f'tools bundle not found: {bundle_dir}')
+        script = tools_root / name / 'install.sh'
+        if not script.is_file():
+            raise AgentRunError(f'tools install script not found: {script}')
+    summary: dict[str, object] = {
+        'run_dir': str(run_dir),
+        'task_dir': str(task_dir),
+        'timeout': timeout,
+        'tools': tools,
+        'harness': harness_name,
+        'harness_version': harness_version,
+        'started_at': datetime.datetime.now().isoformat(timespec='seconds'),
+        'end_reason': None
+    }
     relay_command = f'{sys.executable} {Path(api_relay.__file__).resolve()} --stdio --env-file {env_file.resolve()}'
     try:
-        create_overlay(run_dir)
-        start_vm(run_dir, accel=accel, smp=smp, memory=memory, network='gateway', relay_command=relay_command)
+        create_overlay(run_dir, base_image)
+        start_vm(run_dir, accel=accel, smp=smp, memory=memory, network='gateway', vnc=vnc, relay_command=relay_command)
         wait_ready(run_dir)
         qga = QgaClient(qga_socket_path(run_dir))
         summary['gateway_status'] = _check_gateway(qga)
 
-        deploy_config = {'run_dir': str(run_dir),
-                         'bundles': [{'name': name, 'path': str(Path(path).resolve()), 'script': script, 'checks': checks}
-                                     for name, path, script, checks in DEFAULT_DEPLOY_BUNDLES],
-                         'artifacts': []}
-        config_path = run_dir / 'deploy-config.json'
-        config_path.write_text(json.dumps(deploy_config, indent=2) + '\n')
-        deploy_module.deploy(config_path, check_only=False)
+        bundles = [
+            BundleConfig(
+                name=name,
+                path=(tools_root / name / version).resolve(),
+                script=(tools_root / name / 'install.sh').resolve(),
+                version=version
+            ) for name, version in tool_specs
+        ]
+        bundles.append(BundleConfig(name=harness_name, path=harness_dir, script=SCRIPTS_DIR / INSTALL_SCRIPT))
+        install_bundles(run_dir, bundles)
         summary['deploy'] = 'ok'
 
-        _guest_tar_upload(qga, CODEX_ARCHIVE.resolve(), '/opt/codex-dist')
-        result = qga.run(['/bin/bash', '-c',
-                          'mkdir -p /opt/codex && tar xzf /opt/codex-dist/0.156.1.tar.gz -C /opt/codex && '
-                          'rm -rf /opt/codex-dist && /opt/codex/bin/codex --version'], timeout=600.0)
-        if result.exitcode != 0:
-            raise AgentRunError(f'codex extract failed: {result.stderr.decode()[:300]}')
-        summary['codex_version'] = result.stdout.decode().strip()
-
+        workdir = qga.run(['/bin/bash', '-c', 'install -d -o agent -g agent /task/work /task/output'], timeout=30.0)
+        if workdir.exitcode != 0:
+            raise AgentRunError(f'cannot create /task/work and /task/output: {workdir.stderr.decode()[:300]}')
         instruction = (task_dir / 'instruction.md').resolve()
         qga.upload('/task/instruction.md', instruction.read_bytes())
         if (task_dir / 'input').is_dir():
             _guest_tar_upload_dir(qga, task_dir / 'input', '/task/input')
-        result = qga.run(['/bin/bash', '-c', 'mkdir -p /home/agent/.codex && chown agent:agent /home/agent/.codex'],
-                         timeout=30.0)
-        if result.exitcode != 0:
-            raise AgentRunError(f'codex home setup failed: {result.stderr.decode()[:300]}')
-        _write_guest_file(qga, '/home/agent/.codex/config.toml', _codex_config(env['MODEL'], env['EFFORT']),
-                          owner='agent:agent')
-        _write_guest_file(qga, '/opt/benchmark/run-agent.sh', _agent_script(), mode='755', owner='agent:agent')
+        adapter.configure(qga, env)
+        write_file(qga, '/task/run-agent.sh', adapter.run_script(), mode='755', owner='agent:agent')
 
         agent_started = time.monotonic()
-        pid = qga.exec_start(['/usr/sbin/runuser', '-u', 'agent', '--', '/bin/bash', '/opt/benchmark/run-agent.sh'])
+        pid = qga.exec_start(['/usr/sbin/runuser', '-u', 'agent', '--', '/bin/bash', '/task/run-agent.sh'])
         summary['agent_pid'] = pid
         timed_out = False
         agent_exited = False
@@ -263,7 +241,7 @@ def run_agent(task_dir: Path, out_dir: Path, run_dir: Path, env_file: Path, time
                 break
             if time.monotonic() - agent_started > timeout:
                 timed_out = True
-                qga.run(['/bin/bash', '-c', 'pkill -KILL -f codex || true; pkill -KILL -f run-agent || true'], timeout=30.0)
+                qga.run(['/bin/bash', '-c', f'pkill -KILL -f {harness} || true; pkill -KILL -f run-agent || true'], timeout=30.0)
                 break
             if vm_status(run_dir)['pid'] is None:
                 raise AgentRunError('QEMU exited during the agent stage')
@@ -278,7 +256,7 @@ def run_agent(task_dir: Path, out_dir: Path, run_dir: Path, env_file: Path, time
         summary['agent_exitcode'] = exitcode
         summary['end_reason'] = _classify(agent_exited, exitcode, timed_out)
         summary['retrieved'] = _collect_output(qga, out_dir)
-    except (AgentRunError, deploy_module.DeployError, VmError, QgaError, OSError) as error:
+    except (AgentRunError, HarnessError, GuestError, DeployError, VmError, QgaError, OSError) as error:
         summary['end_reason'] = END_ENV_FAILURE
         summary['error'] = str(error)
     finally:
@@ -298,7 +276,7 @@ def _guest_tar_upload_dir(qga: QgaClient, host_dir: Path, guest_dir: str) -> Non
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode='w:gz') as archive:
         archive.add(host_dir, arcname='.')
-    tag = uuid.uuid4().hex[:8]
+    tag = uuid.uuid4().hex[: 8]
     qga.upload(f'/tmp/{tag}.tar.gz', buffer.getvalue())
     result = qga.run(['/bin/bash', '-c', f'mkdir -p {guest_dir} && tar xzf /tmp/{tag}.tar.gz -C {guest_dir} && rm -f /tmp/{tag}.tar.gz'],
                      timeout=600.0)

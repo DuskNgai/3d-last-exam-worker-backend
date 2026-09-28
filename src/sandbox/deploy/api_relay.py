@@ -22,9 +22,20 @@ from urllib.parse import urlsplit
 GUESTFWD_PORT: Final = 8443
 BODY_CHUNK_BYTES: Final = 65536
 UPSTREAM_TIMEOUT: Final = 900.0
-HOP_BY_HOP: Final = frozenset({'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization',
-                               'te', 'trailers', 'transfer-encoding', 'upgrade', 'host', 'content-length',
-                               'authorization', 'x-api-key'})
+HOP_BY_HOP: Final = frozenset({
+    'connection',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'te',
+    'trailers',
+    'transfer-encoding',
+    'upgrade',
+    'host',
+    'content-length',
+    'authorization',
+    'x-api-key'
+})
 
 
 class RelayError(RuntimeError):
@@ -112,21 +123,25 @@ class RelayCore:
             upstream_path = path
         else:
             upstream_path = f'{self._base_path}{path}'
-        outgoing = {name: value for name, value in headers.items() if name not in HOP_BY_HOP}
+        outgoing = {
+            name: value for name, value in headers.items() if name not in HOP_BY_HOP
+        }
         if 'x-api-key' in headers and 'authorization' not in headers:
             outgoing['x-api-key'] = self._api_key
         else:
             outgoing['authorization'] = f'Bearer {self._api_key}'
-        connection = _IPv4HTTPSConnection(self._upstream.hostname, self._upstream.port or 443,
-                                          timeout=UPSTREAM_TIMEOUT)
+        connection = _IPv4HTTPSConnection(self._upstream.hostname, self._upstream.port or 443, timeout=UPSTREAM_TIMEOUT)
         try:
             connection.request(method, upstream_path, body=body, headers=outgoing)
             response = connection.getresponse()
         except Exception:
             connection.close()
             raise
-        safe_headers = {name.lower(): value for name, value in response.getheaders()
-                        if name.lower() not in HOP_BY_HOP and name.lower() != 'content-length'}
+        safe_headers = {
+            name.lower(): value
+            for name, value in response.getheaders()
+            if name.lower() not in HOP_BY_HOP and name.lower() != 'content-length'
+        }
         return response.status, safe_headers, response
 
 
@@ -151,8 +166,9 @@ def _read_request(rfile: io.BufferedIOBase) -> tuple[str, str, dict[str, str], b
     return method, path, headers, body
 
 
-def _write_response(wfile: io.BufferedIOBase, status: int, headers: dict[str, str], response: http.client.HTTPResponse,
-                    keep_alive: bool) -> None:
+def _write_response(
+    wfile: io.BufferedIOBase, status: int, headers: dict[str, str], response: http.client.HTTPResponse, keep_alive: bool
+) -> None:
     """Stream an upstream response to the guest, framing chunks when the length is unknown."""
     reason = http.client.responses.get(status, 'status')
     head = [f'HTTP/1.1 {status} {reason}']
@@ -181,8 +197,10 @@ def _write_response(wfile: io.BufferedIOBase, status: int, headers: dict[str, st
 def _write_simple(wfile: io.BufferedIOBase, status: int, body: bytes) -> None:
     """Write a one-shot plain-text response and signal close."""
     reason = http.client.responses.get(status, 'status')
-    wfile.write(f'HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\n'
-                f'Content-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode())
+    wfile.write(
+        f'HTTP/1.1 {status} {reason}\r\nContent-Type: text/plain\r\n'
+        f'Content-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode()
+    )
     wfile.write(body)
     wfile.flush()
 
@@ -220,7 +238,7 @@ class _RelayHandler(socketserver.StreamRequestHandler):
     """One guest connection on the unix socket transport."""
 
     def handle(self) -> None:
-        relay: '_RelayServer' = self.server  # type: ignore[assignment]
+        relay: '_RelayServer' = self.server # type: ignore[assignment]
         serve_channel(self.rfile, self.wfile, relay.core)
 
 

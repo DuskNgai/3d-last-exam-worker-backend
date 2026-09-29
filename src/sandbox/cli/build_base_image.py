@@ -1,19 +1,19 @@
-#!/usr/bin/env python3
-"""Command line interface for building the QEMU sandbox base image.
+"""
+Command line interface for building the QEMU sandbox base image.
 
 This is the public CLI entry point; the core build logic lives in
 sandbox.setup.build_base_image and can be reused as a library.
 """
 
 import argparse
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from sandbox.qga import QgaError
-from sandbox.setup.build_base_image import BuildConfig, BuildError, build_base_image
+from sandbox.setup.build_base_image import build_base_image, BuildConfig, BuildError
 
 
 def main() -> None:

@@ -1,17 +1,22 @@
-"""QEMU virtual machine lifecycle: overlay creation, start, stop, status.
+"""
+QEMU virtual machine lifecycle: overlay creation, start, stop, status.
 
 Every run lives in its own run directory on local storage. All paths passed to
 QEMU are absolute because `-daemonize` changes the working directory to `/`.
 """
 
+from collections.abc import Iterator
+import contextlib
+import fcntl
 import json
 import os
+from pathlib import Path
 import signal
 import subprocess
 import time
-from pathlib import Path
 from typing import Final
 
+from ..qemu_command import machine_flags
 from ..qga import QgaClient, QgaError, QmpClient
 
 OVERLAY_NAME: Final = 'overlay.qcow2'
@@ -20,6 +25,9 @@ QMP_SOCKET_NAME: Final = 'qmp.socket'
 SERIAL_LOG_NAME: Final = 'serial.log'
 PIDFILE_NAME: Final = 'vm.pid'
 CONFIG_NAME: Final = 'vm.json'
+LOCK_NAME: Final = 'run.lock'
+RELAY_LOG_NAME: Final = 'relay.log'
+USAGE_NAME: Final = 'usage.jsonl'
 GUESTFWD_ADDRESS: Final = '10.0.2.100'
 GUESTFWD_PORT: Final = 8443
 STOP_GRACE_SECONDS: Final = 60.0
@@ -31,12 +39,14 @@ class VmError(RuntimeError):
 
 
 def overlay_path(run_dir: Path) -> Path:
-    """Return the overlay disk path inside a run directory.
+    """
+    Return the overlay disk path inside a run directory.
 
-    `run_dir` (Path): Run directory.
+    Args:
+        `run_dir` (Path): Run directory.
 
     Returns:
-        Path: Absolute overlay path.
+        `overlay` (Path): Absolute overlay path.
     """
     return run_dir.resolve() / OVERLAY_NAME
 
@@ -51,17 +61,54 @@ def qmp_socket_path(run_dir: Path) -> Path:
     return run_dir.resolve() / QMP_SOCKET_NAME
 
 
-def create_overlay(run_dir: Path, base_image: Path) -> Path:
-    """Create a qcow2 overlay backed by the frozen base image.
+@contextlib.contextmanager
+def run_lock(run_dir: Path) -> Iterator[Path]:
+    """
+    Claim a run directory for the lifetime of one run.
 
-    `run_dir` (Path): Run directory, created if missing.
-    `base_image` (Path): Frozen base qcow2.
+    The claim is a non-blocking flock on <run_dir>/run.lock. The kernel drops it when the owning process
+    dies, so a lock file left by a killed or kept run never blocks the next one; a directory a live run
+    holds is refused before anything in it is touched.
 
-    Returns:
-        Path: The new overlay path.
+    Args:
+        `run_dir` (Path): Run directory to claim, created if missing.
+
+    Yields:
+        `lock_path` (Path): The lock file inside the run directory.
 
     Raises:
-        VmError: The base image is missing or qemu-img failed.
+        VmError: A live run already holds the directory.
+    """
+    run_dir = run_dir.resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = run_dir / LOCK_NAME
+    with lock_path.open('a+', encoding='utf-8') as handle:
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            handle.seek(0)
+            holder = handle.read().strip() or 'unknown'
+            raise VmError(f'run directory {run_dir} is held by a live run (pid {holder})') from error
+        handle.seek(0)
+        handle.truncate()
+        handle.write(f'{os.getpid()}\n')
+        handle.flush()
+        yield lock_path
+
+
+def create_overlay(run_dir: Path, base_image: Path) -> Path:
+    """
+    Create a qcow2 overlay backed by the frozen base image.
+
+    Args:
+        `run_dir` (Path): Run directory, created if missing.
+        `base_image` (Path): Frozen base qcow2.
+
+    Returns:
+        `overlay` (Path): The new overlay path.
+
+    Raises:
+        VmError: The base image is missing, an overlay already exists, or qemu-img failed.
     """
     base_image = base_image.resolve()
     if not base_image.is_file():
@@ -81,24 +128,9 @@ def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, networ
                         relay_command: str | None) -> list[str]:
     """Assemble the QEMU command line for a run directory."""
     run_dir = run_dir.resolve()
-    command = [
-        'qemu-system-x86_64',
-        '-machine',
-        'q35',
-        '-accel',
-        accel,
-        '-cpu',
-        'host' if accel == 'kvm' else 'max',
-        '-smp',
-        str(smp),
-        '-m',
-        str(memory),
-        '-drive',
-        f'file={overlay_path(run_dir)},if=virtio,format=qcow2',
-        '-device',
-        'virtio-gpu-pci',
-        '-display',
-        'none',
+    command = ['qemu-system-x86_64']
+    command += machine_flags(accel, smp, memory, overlay_path(run_dir), run_dir / PIDFILE_NAME)
+    command += [
         '-chardev',
         f'socket,path={qga_socket_path(run_dir)},server=on,wait=off,id=qga0',
         '-device',
@@ -109,10 +141,6 @@ def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, networ
         f'unix:{qmp_socket_path(run_dir)},server=on,wait=off',
         '-serial',
         f'file:{run_dir / SERIAL_LOG_NAME}',
-        '-pidfile',
-        str(run_dir / PIDFILE_NAME),
-        '-no-reboot',
-        '-daemonize',
     ]
     if network == 'none':
         command += ['-nic', 'none']
@@ -142,21 +170,23 @@ def start_vm(
     vnc: str | None = None,
     relay_command: str | None = None
 ) -> int:
-    """Start a daemonized QEMU for an existing run directory overlay.
+    """
+    Start a daemonized QEMU for an existing run directory overlay.
 
-    `run_dir` (Path): Run directory holding the overlay.
-    `accel` (str): `kvm` or `tcg`.
-    `smp` (int): vCPU count.
-    `memory` (int): RAM in MiB.
-    `network` (str): `none`, `nat`, or `gateway`; gateway isolates the guest with restrict=on
-        and, when relay_command is given, forwards one address to it, spawned per guest connection.
-    `vnc` (str | None): Optional VNC display such as `:5` for debugging; a bare `:5` is pinned to
-        loopback, and an explicit host such as `0.0.0.0:5` is passed through as written.
-    `relay_command` (str | None): Command QEMU runs per forwarded guest connection; only used
-        in gateway mode, must not contain commas.
+    Args:
+        `run_dir` (Path): Run directory holding the overlay.
+        `accel` (str): `kvm` or `tcg`.
+        `smp` (int): Number of virtual CPUs.
+        `memory` (int): RAM in MiB.
+        `network` (str): `none`, `nat`, or `gateway`; gateway isolates the guest with restrict=on
+            and, when relay_command is given, forwards one address to it, spawned per guest connection.
+        `vnc` (str | None): Optional VNC display such as `:5` for debugging; a bare `:5` is pinned to
+            loopback, and an explicit host such as `0.0.0.0:5` is passed through as written.
+        `relay_command` (str | None): Command QEMU runs per forwarded guest connection; only used
+            in gateway mode, must not contain commas.
 
     Returns:
-        int: The QEMU process pid.
+        `pid` (int): The QEMU process pid.
 
     Raises:
         VmError: The overlay is missing, the VM is already running, a relay_command is invalid, or QEMU failed to start.
@@ -189,10 +219,15 @@ def start_vm(
 
 
 def read_pid(run_dir: Path, wait: bool = False) -> int | None:
-    """Return the live QEMU pid for a run directory, or None.
+    """
+    Return the live QEMU pid for a run directory, or None.
 
-    `run_dir` (Path): Run directory.
-    `wait` (bool): Give a just-daemonized QEMU a few seconds to write the pidfile.
+    Args:
+        `run_dir` (Path): Run directory holding the pidfile.
+        `wait` (bool): Give a just-daemonized QEMU a few seconds to write the pidfile.
+
+    Returns:
+        `pid` (int | None): The live QEMU pid, or None when the pidfile is missing or the process is gone.
     """
     pidfile = run_dir.resolve() / PIDFILE_NAME
     deadline = time.monotonic() + 10.0
@@ -213,7 +248,12 @@ def read_pid(run_dir: Path, wait: bool = False) -> int | None:
 
 
 def wait_ready(run_dir: Path, timeout: float = READY_TIMEOUT_SECONDS) -> None:
-    """Block until the guest agent answers or the timeout expires.
+    """
+    Block until the guest agent answers or the timeout expires.
+
+    Args:
+        `run_dir` (Path): Run directory holding the QGA socket.
+        `timeout` (float): Seconds to wait for the guest agent.
 
     Raises:
         VmError: The VM died or the guest agent never came up.
@@ -245,17 +285,19 @@ def _wait_dead(run_dir: Path, seconds: float) -> bool:
 
 
 def stop_vm(run_dir: Path, grace: float = STOP_GRACE_SECONDS) -> str:
-    """Stop the VM with escalating force and report the level that worked.
+    """
+    Stop the VM with escalating force and report the level that worked.
 
     ACPI power button via QMP is the graceful level: qemu-ga's guest-shutdown and
     QGA-issued `systemctl poweroff` both hang on this guest because stopping
     qemu-guest-agent.service waits on the very exec session that requested it.
 
-    `run_dir` (Path): Run directory.
-    `grace` (float): Seconds to wait for the ACPI shutdown.
+    Args:
+        `run_dir` (Path): Run directory of the running VM.
+        `grace` (float): Seconds to wait for the ACPI shutdown.
 
     Returns:
-        str: `powerdown`, `term`, `kill`, or `stopped` if it was not running.
+        `level` (str): `powerdown`, `term`, `kill`, or `stopped` if it was not running.
     """
     run_dir = run_dir.resolve()
     pid = read_pid(run_dir)
@@ -281,13 +323,17 @@ def stop_vm(run_dir: Path, grace: float = STOP_GRACE_SECONDS) -> str:
 
 
 def vm_status(run_dir: Path) -> dict[str, object]:
-    """Report pid, QMP runstate, and guest agent reachability.
+    """
+    Report pid, QMP runstate, and guest agent reachability.
+
+    Args:
+        `run_dir` (Path): Run directory to inspect.
 
     Returns:
-        dict: Keys `pid`, `runstate`, `qga`.
+        `status` (dict[str, object]): Keys `pid`, `runstate`, `qga`.
     """
     run_dir = run_dir.resolve()
-    status: dict = {
+    status: dict[str, object] = {
         'pid': read_pid(run_dir),
         'runstate': None,
         'qga': False

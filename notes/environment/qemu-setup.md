@@ -22,7 +22,7 @@ ls -l /dev/kvm   # 存在且当前用户可读写
 - 普通主机无 sudo：只能放弃 KVM；
 - 容器里 `/dev/kvm` 被设备过滤器拦截（容器内 mknod 无效），需管理员重建容器加 `--device=/dev/kvm`。
 
-KVM 不可用时，在启动命令上加 `--accel tcg`，功能等价、速度变慢。
+KVM 不可用时，在启动命令上加 `--accel tcg`，功能等价，速度慢得多。
 
 GPU 负载另走 VFIO 直通（依赖 KVM 与 IOMMU），属管理员一次性配置。
 
@@ -42,8 +42,16 @@ python3 src/sandbox/cli/build_base_image.py \
 - `--iso`：输入镜像，只读。
 - `--iso-sha256`：官方哈希，传入则构建先核对、不匹配直接失败；不传则只在 manifest 记录计算值，不做来源校验。
 - `--out`：输出目录，必须在本机文件系统上，网络文件系统不支持。
-- `--accel`：`kvm`（默认）或 `tcg`；无 KVM 时用 tcg，功能等价、速度变慢。
+- `--accel`：`kvm`（默认）或 `tcg`。无 KVM 时按前文说明使用 `tcg`。
 - `--smp`、`--memory`、`--disk`：构建资源，默认 4 vCPU、8192 MiB 内存、64G 磁盘。
-- `--skip-install`：中断恢复用，复用输出目录里已有的 base.qcow2，跳过安装直接进验证。
+- `--skip-install`：复用已有的 base.qcow2，跳过安装直接进验证。已冻结的镜像也能用：启动前重新开放写权限，跑完再冻回 444；镜像必须已写入完成标记，未装完的不能恢复。复用镜像跑验证会真写盘，所以跑完冻结哈希会变、manifest 会重写。
 
-装好的系统盘 `base.qcow2` 会写入输出目录，已预置 admin 管理员账号、uid 1001 的 agent 账号、qemu-guest-agent 自启与桌面自动登录。admin 的登录密码就是该 ISO 的 sha256，不另存密码文件；agent 账号密码锁定，只走桌面自动登录。构建完成后冻结为只读（444）：之后每次任务以它为 backing file 叠 overlay 启动虚拟机，运行写入全落在 overlay 上，base 永不改动。同目录另有 manifest.json（哈希与 guest 信息）与 seed/ 构建日志。
+这个命令具体做了如下事情：
+
+1. 无人值守安装一块空盘，装完 guest 自行关机。
+2. 立刻断网启动同一块盘做检查：完成标记、系统与账号、桌面自动登录、Node.js、libfuse2t64、每个 harness 的依赖，任一项不过即终止构建。
+3. 通过后把系统盘冻结为只读（444）。此后每次任务以它为 backing file 创建 overlay，写入留在 overlay 里，base 镜像不动。
+
+镜像里两个账号：特权账号 `sandboxadm`，密码是 ISO 的 sha256（manifest 里记着）；评测用的 `agent` 桌面自动登录，无 sudo，密码锁定。
+
+镜像里还预装了 harness 的 npm 依赖闭包：`src/sandbox/setup/base_image/harness-deps.json` 每个 harness 一节，构建时逐个装到 `/opt/harness-deps/<名字>/node_modules`，装 harness 时链接进 `/task/harness/node_modules`。给 harness 加依赖得改这个文件并重建镜像。

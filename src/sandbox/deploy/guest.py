@@ -8,7 +8,15 @@ class GuestError(RuntimeError):
 
 
 def write_file(qga: QgaClient, remote_path: str, content: str, mode: str = '644', owner: str | None = None) -> None:
-    """Write text to a guest file with mode and optional owner.
+    """
+    Write text to a guest file with mode and optional owner.
+
+    Args:
+        `qga` (QgaClient): Guest agent client used to upload and fix permissions.
+        `remote_path` (str): Guest path that receives the content.
+        `content` (str): Text written to the file, encoded as UTF-8.
+        `mode` (str): chmod mode applied to the file.
+        `owner` (str | None): chown owner and group; skipped when None.
 
     Raises:
         GuestError: The write or a permission fix failed.

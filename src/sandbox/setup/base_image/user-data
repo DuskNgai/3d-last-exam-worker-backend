@@ -15,8 +15,8 @@ autoinstall:
   identity:
     hostname: sandbox-base
     realname: Sandbox Admin
-    username: admin
-    password: "__ADMIN_HASH__"
+    username: sandboxadm
+    password: "__PRIVILEGED_HASH__"
   ssh:
     install-server: false
     allow-pw: false
@@ -29,6 +29,10 @@ autoinstall:
       name: direct
   packages:
     - qemu-guest-agent
+    # AppImage harnesses need the fuse2 runtime; noble ships it as libfuse2t64.
+    - libfuse2t64
+    # node-gyp compiles the harness dependencies that ship native modules.
+    - build-essential
   late-commands:
     - curtin in-target -- useradd --create-home --uid 1001 --shell /bin/bash agent
     - curtin in-target -- passwd -l agent
@@ -37,5 +41,18 @@ autoinstall:
     - mkdir -p /target/home/agent/.config
     - touch /target/home/agent/.config/gnome-initial-setup-done
     - chown -R 1001:1001 /target/home/agent/.config
+    # npm-shaped harnesses need node >= 22.19 and the ZCode runtime pins >= 24;
+    # the noble archive only has 18.19, so take the official tarball.
+    - wget -q -O /tmp/node.tar.gz https://nodejs.org/dist/v24.14.0/node-v24.14.0-linux-x64.tar.gz
+    - mkdir -p /target/usr/local
+    - tar -xzf /tmp/node.tar.gz -C /target/usr/local --strip-components=1
+    # Electron harnesses want the namespace sandbox; 24.04 blocks unprivileged
+    # user namespaces by default, which pushes them onto a SUID helper that an
+    # AppImage cannot provide.
+    - printf 'kernel.apparmor_restrict_unprivileged_userns = 0\n' > /target/etc/sysctl.d/90-harness-userns.conf
+    # Staged per-harness npm closures, rendered from base_image/harness-deps.json.
+__HARNESS_DEPS__
     - touch /target/etc/cloud/cloud-init.disabled
+    - mkdir -p /target/var/lib/sandbox-base-image
+    - touch /target/var/lib/sandbox-base-image/install-complete
   shutdown: poweroff

@@ -1,7 +1,7 @@
 """
 Download and verify pinned material files.
 
-Shared by download_harnesses.py and download_tools.py: each supplies its own
+Shared by the download scripts under scripts/download/: each supplies its own
 table and this module runs it. Every path in a table is relative to a material
 root, so the same table fills both the shared store and a local copy.
 
@@ -26,12 +26,12 @@ RETRY_COUNT: Final = 3
 CONNECT_TIMEOUT_SECONDS: Final = 20
 
 
-class ArtifactError(RuntimeError):
+class MaterialError(RuntimeError):
     """A download or verification step failed."""
 
 
 @dataclass(frozen=True)
-class Artifact:
+class Material:
     """
     One distribution file to download and verify.
 
@@ -41,7 +41,7 @@ class Artifact:
         release_utc (str): ISO-8601 UTC release time, or UNKNOWN when no release record was confirmed.
         url (str): Official download URL.
         sha256 (str): Expected digest of the file.
-        path (str): Destination relative to the artifact root.
+        path (str): Destination relative to the material root.
     """
 
     label: str
@@ -90,28 +90,28 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _check_release(artifact: Artifact) -> None:
+def _check_release(material: Material) -> None:
     """
     Refuse a release published after the frozen cutoff.
 
     Args:
-        `artifact` (Artifact): Entry whose release time is checked.
+        `material` (Material): Entry whose release time is checked.
 
     Raises:
-        ArtifactError: The recorded release time is after the cutoff.
+        MaterialError: The recorded release time is after the cutoff.
     """
-    if artifact.release_utc == 'UNKNOWN':
-        print(f'warning: {artifact.label} {artifact.version} release date is not independently verified', file=sys.stderr, flush=True)
+    if material.release_utc == 'UNKNOWN':
+        print(f'warning: {material.label} {material.version} release date is not independently verified', file=sys.stderr, flush=True)
         return
-    if _timestamp(artifact.release_utc) > _timestamp(CUTOFF_UTC):
-        raise ArtifactError(f'{artifact.label} {artifact.version} is after the frozen cutoff: {artifact.release_utc}')
+    if _timestamp(material.release_utc) > _timestamp(CUTOFF_UTC):
+        raise MaterialError(f'{material.label} {material.version} is after the frozen cutoff: {material.release_utc}')
 
 
 def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_delay: int = 0) -> None:
     """
     Download a URL to a path through a .part file, which is replaced only after a clean transfer.
 
-    Both download scripts come through here: the pinned tables call it with the default retry budget, the
+    The download scripts come through here: the pinned tables call it with the default retry budget, the
     source build raises it because a build fetches tens of megabytes over a link that drops.
 
     Args:
@@ -121,11 +121,11 @@ def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_dela
         `retry_delay` (int): Seconds curl waits between retries; omitted when zero.
 
     Raises:
-        ArtifactError: A partial file from an earlier attempt is still there, or curl failed.
+        MaterialError: A partial file from an earlier attempt is still there, or curl failed.
     """
     partial = destination.with_name(destination.name + PARTIAL_SUFFIX)
     if partial.exists():
-        raise ArtifactError(f'partial download already exists; inspect before retrying: {partial}')
+        raise MaterialError(f'partial download already exists; inspect before retrying: {partial}')
     command = ['curl', '--fail', '--location', '--retry', str(retries)]
     if retry_delay:
         command += ['--retry-delay', str(retry_delay)]
@@ -133,59 +133,59 @@ def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_dela
     completed = subprocess.run(command)
     if completed.returncode != 0:
         partial.unlink(missing_ok=True)
-        raise ArtifactError(f'download failed with exit code {completed.returncode}: {url}')
+        raise MaterialError(f'download failed with exit code {completed.returncode}: {url}')
     partial.replace(destination)
 
 
-def _fetch(artifact: Artifact, destination: Path) -> bool:
+def _fetch(material: Material, destination: Path) -> bool:
     """
-    Download one artifact unless it is already present.
+    Download one material unless it is already present.
 
     Args:
-        `artifact` (Artifact): Entry whose URL is fetched.
+        `material` (Material): Entry whose URL is fetched.
         `destination` (Path): Absolute destination path for the file.
 
     Returns:
         `written` (bool): True when bytes were written, False when the file was already there.
 
     Raises:
-        ArtifactError: A partial file was left behind, or curl failed.
+        MaterialError: A partial file was left behind, or curl failed.
     """
     if destination.is_file():
         print(f'exists: {destination}', flush=True)
         return False
-    print(f'download: {artifact.label} {artifact.version}', flush=True)
+    print(f'download: {material.label} {material.version}', flush=True)
     try:
-        fetch(artifact.url, destination)
-    except ArtifactError as error:
-        raise ArtifactError(f'{artifact.label} {artifact.version}: {error}') from error
+        fetch(material.url, destination)
+    except MaterialError as error:
+        raise MaterialError(f'{material.label} {material.version}: {error}') from error
     return True
 
 
-def _verify(artifact: Artifact, destination: Path) -> None:
+def _verify(material: Material, destination: Path) -> None:
     """
     Check a downloaded file against its pinned digest.
 
     Args:
-        `artifact` (Artifact): Entry carrying the expected digest.
+        `material` (Material): Entry carrying the expected digest.
         `destination` (Path): Downloaded file to hash.
 
     Raises:
-        ArtifactError: The digest does not match.
+        MaterialError: The digest does not match.
     """
     actual = sha256(destination)
-    if actual != artifact.sha256:
-        raise ArtifactError(f'{artifact.label} {artifact.version} SHA-256 mismatch: expected {artifact.sha256}, got {actual}')
-    print(f'verified: {artifact.label} {artifact.version} sha256={actual}', flush=True)
+    if actual != material.sha256:
+        raise MaterialError(f'{material.label} {material.version} SHA-256 mismatch: expected {material.sha256}, got {actual}')
+    print(f'verified: {material.label} {material.version} sha256={actual}', flush=True)
     subprocess.run(['file', str(destination)], check=False)
 
 
-def download_material(table: tuple[Artifact, ...], blocked: tuple[Blocked, ...], root: Path) -> dict[str, int]:
+def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...], root: Path) -> dict[str, int]:
     """
-    Download and verify every artifact in one table under root.
+    Download and verify every material in one table under root.
 
     Args:
-        `table` (tuple[Artifact, ...]): Pinned artifacts to fetch and verify.
+        `table` (tuple[Material, ...]): Pinned materials to fetch and verify.
         `blocked` (tuple[Blocked, ...]): Packages deliberately not archived, reported and skipped.
         `root` (Path): Material root the table paths are relative to.
 
@@ -193,7 +193,7 @@ def download_material(table: tuple[Artifact, ...], blocked: tuple[Blocked, ...],
         `summary` (dict[str, int]): Counts of downloaded and already-present files.
 
     Raises:
-        ArtifactError: A release is after the cutoff, a download failed, or a digest mismatched.
+        MaterialError: A release is after the cutoff, a download failed, or a digest mismatched.
     """
     root = root.resolve()
     print(f'root: {root}', flush=True)
@@ -201,24 +201,24 @@ def download_material(table: tuple[Artifact, ...], blocked: tuple[Blocked, ...],
         'downloaded': 0,
         'existing': 0
     }
-    for artifact in table:
-        _check_release(artifact)
-        destination = root / artifact.path
+    for material in table:
+        _check_release(material)
+        destination = root / material.path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        moved = _fetch(artifact, destination)
-        _verify(artifact, destination)
+        moved = _fetch(material, destination)
+        _verify(material, destination)
         summary['downloaded' if moved else 'existing'] += 1
     for record in blocked:
         print(f'blocked: {record.label}\n  source: {record.source}\n  reason: {record.reason}', file=sys.stderr, flush=True)
     return summary
 
 
-def run(table: tuple[Artifact, ...], blocked: tuple[Blocked, ...], description: str) -> None:
+def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: str) -> None:
     """
     Parse --root and run one table, reporting the summary.
 
     Args:
-        `table` (tuple[Artifact, ...]): Pinned artifacts to fetch and verify.
+        `table` (tuple[Material, ...]): Pinned materials to fetch and verify.
         `blocked` (tuple[Blocked, ...]): Packages deliberately not archived, reported and skipped.
         `description` (str): Description shown in the --help output.
 
@@ -232,7 +232,7 @@ def run(table: tuple[Artifact, ...], blocked: tuple[Blocked, ...], description: 
     args = parser.parse_args()
     try:
         summary = download_material(table, blocked, args.root)
-    except (ArtifactError, OSError) as error:
+    except (MaterialError, OSError) as error:
         print(f'download failed: {error}', file=sys.stderr, flush=True)
         raise SystemExit(1) from error
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)

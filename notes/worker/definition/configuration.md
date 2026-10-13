@@ -1,6 +1,6 @@
 # Configuration
 
-Worker 各阶段所需的配置项。
+Worker 所需的配置项，配置文件是 `src/configuration.yaml`。
 
 ## Setup
 
@@ -12,14 +12,15 @@ Worker 各阶段所需的配置项。
 | `device_token` | 设备令牌 | 字符串 | Master 签发的认证凭据 |
 | `tls_certificate_file` | TLS 证书 | 字符串 | 接口 HTTPS 用的自签证书的文件路径 |
 | `tls_key_file` | TLS 私钥 | 字符串 | 自签证书对应的私钥文件路径 |
+| `verification_environment` | 核验环境 | 字符串 | 核验用的 Python venv，只读 |
+
+## Directory
+
+| 配置项 | 中文 | 类型 | 含义 |
+| --- | --- | --- | --- |
 | `materials_directory` | 材料目录 | 字符串 | 材料放置的目录，内容见 [materials.md](materials.md) |
+| `input_directory` | 输入目录 | 字符串 | 任务卡、任务输入与核验材料的存放目录 |
+| `run_directory` | 运行目录 | 字符串 | 各条评测各次尝试运行信息与结果的存放目录；必须是本机磁盘 |
+| `verification_directory` | 核验目录 | 字符串 | 各条评测各次尝试核验结果的存放目录 |
+| `archive_directory` | 档案目录 | 字符串 | 评测的归档目录，档案内容见 [archive.md](archive.md) |
 
-## Run
-
-| 配置项 | 中文 | 类型 | 含义 |
-| --- | --- | --- | --- |
-
-## Verification
-
-| 配置项 | 中文 | 类型 | 含义 |
-| --- | --- | --- | --- |

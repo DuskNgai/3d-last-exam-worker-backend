@@ -8,7 +8,7 @@ Master 访问 Worker 的接口。全部请求由 Master 发起，Worker 不主�
 
 ## Transport
 
-接口走 HTTPS。Worker 出示安装时生成的 TLS 自签证书，对应的 TLS 私钥在安装时一并生成，只存本机；证书指纹随设备标识、设备令牌一起经其他途径交 Master 登记。
+接口走 HTTPS。Worker 出示安装时生成的 TLS 自签证书，对应的 TLS 私钥在安装时一并生成，只存本机；证书指纹经其他途径交 Master 登记。
 
 TODO：未来可能转向 CA 签发。
 

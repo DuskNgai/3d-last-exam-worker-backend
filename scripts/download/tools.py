@@ -1,22 +1,26 @@
 """
 Download and verify the tool packages.
 
-    python3 scripts/download_tools.py --root <material root>
+    python3 scripts/download/tools.py --root <material root>
 
 The table pins each vendor distribution under tools/<name>/<version>/. A tool
 bundle also needs companion files the vendor does not ship as one package: the
 offline wheels under tools/mujoco/3.14.0/wheels/ and the conda packages under
 tools/python/3.11.16/conda/ with their conda-packages.json. Those are resolved
 separately and are not part of this table. Harness distributions live in
-download_harnesses.py.
+harnesses.py.
 """
 
+from pathlib import Path
+import sys
 from typing import Final
 
-from common import Artifact, run
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ARTIFACTS: Final = (
-    Artifact(
+from common import Material, run
+
+MATERIALS: Final = (
+    Material(
         'Blender',
         '5.2.2',
         '2026-09-15T09:18:49Z',
@@ -24,7 +28,7 @@ ARTIFACTS: Final = (
         '84098912789dc450e95697c4184fb8a90acbe5111c2ba4aede3fecb57806a168',
         'tools/blender/5.2.2/blender-5.2.2-linux-x64.tar.xz'
     ),
-    Artifact(
+    Material(
         'FreeCAD',
         '1.1.3',
         '2026-07-25T04:53:36Z',
@@ -32,7 +36,7 @@ ARTIFACTS: Final = (
         '3a853eb69ee595f779f2255dbf80a765926981d8ff68903cefee4dfb03a8f5ef',
         'tools/freecad/1.1.3/FreeCAD_1.1.3-Linux-x86_64-py311.AppImage'
     ),
-    Artifact(
+    Material(
         'MuJoCo',
         '3.14.0',
         '2026-09-22T17:30:24.940590Z',
@@ -41,7 +45,7 @@ ARTIFACTS: Final = (
         '922983dfdf88d29f4eb0f451a1d18867156d9fc97e3df6e63b9933cc0eba4d38',
         'tools/mujoco/3.14.0/mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
     ),
-    Artifact(
+    Material(
         'Python',
         '3.11.16',
         '2026-08-27T16:21:53Z',
@@ -49,7 +53,7 @@ ARTIFACTS: Final = (
         'a095fd0449140bf8c6e77d251d9a425081fc00498337101134ba27e8355cac60',
         'tools/python/3.11.16/python-3.11.16-linux-64.conda'
     ),
-    Artifact(
+    Material(
         'SDF View',
         '0.2.0',
         'UNKNOWN',
@@ -63,4 +67,4 @@ ARTIFACTS: Final = (
 BLOCKED: Final = ()
 
 if __name__ == '__main__':
-    run(ARTIFACTS, BLOCKED, 'Download and verify the tool packages.')
+    run(MATERIALS, BLOCKED, 'Download and verify the tool packages.')

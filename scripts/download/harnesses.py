@@ -1,16 +1,15 @@
 """
 Download and verify the harness material, and build the distribution that is not downloadable.
 
-    python3 scripts/download_harnesses.py --root <material root>
-    python3 scripts/download_harnesses.py --root <material root> --work-dir <scratch directory>
+    python3 scripts/download/harnesses.py --root <material root>
+    python3 scripts/download/harnesses.py --root <material root> --work-dir <scratch directory>
 
 The table pins each vendor distribution under harnesses/<name>/<version>/. Files
 already on disk are skipped and re-verified, so one run over a complete root is a
 full verification pass. ZCode is the exception: the vendor publishes no CLI
 distribution, so this script builds it from source into harnesses/zcode/<version>/
 when nothing is there, and otherwise checks the tarball against the manifest.json
-that build wrote. The Ubuntu ISO is fetched by hand. Tool packages live in
-download_tools.py.
+that build wrote. The Ubuntu ISO lives in isos.py and tool packages in tools.py.
 """
 
 import argparse
@@ -23,10 +22,12 @@ import subprocess
 import sys
 from typing import Final
 
-from common import Artifact, ArtifactError, Blocked, download_material, fetch, sha256
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-ARTIFACTS: Final = (
-    Artifact(
+from common import Blocked, download_material, fetch, Material, MaterialError, sha256
+
+MATERIALS: Final = (
+    Material(
         'Antigravity CLI',
         '1.2.11',
         '2026-09-25T04:22:11Z',
@@ -34,7 +35,7 @@ ARTIFACTS: Final = (
         'c91c62c5e6fa954f5a7e1d7b9ad417d749db4aa60a4ba0b3d604dec1b645d190',
         'harnesses/antigravity-cli/1.2.11/agy_cli_linux_x64.tar.gz'
     ),
-    Artifact(
+    Material(
         'Claude Code',
         '2.1.283',
         '2026-09-25T18:49:30.967Z',
@@ -42,7 +43,7 @@ ARTIFACTS: Final = (
         'd14ec0fca400151092c926928fea7e8e38231f7a90e6e1f8eeb2a55c24676afb',
         'harnesses/claude-code/2.1.283/claude-code-linux-x64-2.1.283.tgz'
     ),
-    Artifact(
+    Material(
         'CodeBuddy Code',
         '2.158.0',
         '2026-09-24T14:09:51.432Z',
@@ -50,7 +51,7 @@ ARTIFACTS: Final = (
         '4396a3997906521fe3a8ead7059d61840025b664ca4f65ce6f205960a9f44e0e',
         'harnesses/codebuddy-code/2.158.0/codebuddy-code-2.158.0.tgz'
     ),
-    Artifact(
+    Material(
         'Codex CLI',
         '0.157.0',
         '2026-09-25T02:31:06Z',
@@ -58,7 +59,7 @@ ARTIFACTS: Final = (
         '042f851ea3fc1083c45157520520944fc790632b53ebc580fc98eaca55862a25',
         'harnesses/codex/0.157.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
     ),
-    Artifact(
+    Material(
         'DeepSeek Harness',
         '0.1.7-rc.2',
         '2026-09-24T14:18:22Z',
@@ -66,7 +67,7 @@ ARTIFACTS: Final = (
         '5f2da7272d9485abc223e681075809a8d929697c5232ee445718e1b7e066bff8',
         'harnesses/deepseek-harness/0.1.7-rc.2/dsh-0.1.7-rc.2.tgz'
     ),
-    Artifact(
+    Material(
         'Grok Build',
         '1.0.41',
         '2026-09-22T16:34:24Z',
@@ -74,7 +75,7 @@ ARTIFACTS: Final = (
         '9ce03ed23e16ea01072b4496263d6213a27899e1e3e107f008d36edf82e70407',
         'harnesses/grok-build/1.0.41/grok-1.0.41-linux-x86_64'
     ),
-    Artifact(
+    Material(
         'Kimi Code CLI',
         '2.1.1',
         '2026-09-24T07:27:15.480Z',
@@ -82,7 +83,7 @@ ARTIFACTS: Final = (
         '6690a29d7b5e14812754dd100136b7f4ee2577add8895f00fe27025b4412049f',
         'harnesses/kimi-code/2.1.1/kimi-code-2.1.1.tgz'
     ),
-    Artifact(
+    Material(
         'Kiro CLI',
         '2.24.1',
         '2026-09-25T02:20:13.596492Z',
@@ -90,7 +91,7 @@ ARTIFACTS: Final = (
         '9ddc94fe5d1c7530e14bf93b98e78b0bc74e3a36e14cfcf756373ba65ce41a2a',
         'harnesses/kiro-cli/2.24.1/kirocli-x86_64-linux.tar.gz'
     ),
-    Artifact(
+    Material(
         'MiniMax Code',
         '0.5.5',
         '2026-09-25T16:49:11.277Z',
@@ -98,7 +99,7 @@ ARTIFACTS: Final = (
         '1aee10f29045618d46fd37f341b4708f4ea3c0592cc35b8cb15f23671dbf0456',
         'harnesses/minimax-code/0.5.5/minimax-code-0.5.5.tgz'
     ),
-    Artifact(
+    Material(
         'Mistral Vibe',
         '2.25.8',
         '2026-09-23T15:29:18Z',
@@ -106,7 +107,7 @@ ARTIFACTS: Final = (
         'dbe693ee66f29fdfcf9029dcbf3b2d4da138554b193e432b089840148ecf08b3',
         'harnesses/mistral-vibe/2.25.8/vibe-acp-linux-x86_64-2.25.8.tar.gz'
     ),
-    Artifact(
+    Material(
         'Muse Code',
         '1.4.0-R4161.1',
         'UNKNOWN',
@@ -114,7 +115,7 @@ ARTIFACTS: Final = (
         '1b68bd4518d53a2aaff063915df4d141b0a205e6d79038299d04e3a14e85a5b9',
         'harnesses/muse-code/1.4.0-R4161.1/muse-x86-linux'
     ),
-    Artifact(
+    Material(
         'Qwen Code',
         '0.24.5',
         '2026-09-24T17:16:56.822Z',
@@ -122,7 +123,7 @@ ARTIFACTS: Final = (
         '61490a0fe061d9fd539f238ef2b6a133ea203eeb1682f65b21b6af2c1c428869',
         'harnesses/qwen-code/0.24.5/qwen-code-linux-x64.tar.gz'
     ),
-    Artifact(
+    Material(
         'TRAE CLI',
         '0.120.52',
         'UNKNOWN',
@@ -225,7 +226,7 @@ def _download(url: str, destination: Path) -> Path:
     print(f'== download {url}', flush=True)
     try:
         fetch(url, destination, retries=DOWNLOAD_RETRIES, retry_delay=DOWNLOAD_RETRY_DELAY)
-    except ArtifactError as error:
+    except MaterialError as error:
         raise ZcodeBuildError(f'{url}: {error}') from error
     print(f'   {destination.name}: sha256={sha256(destination)}', flush=True)
     return destination
@@ -409,9 +410,9 @@ def main() -> None:
     parser.add_argument('--keep-work', action='store_true', help='keep the ZCode scratch directory')
     args = parser.parse_args()
     try:
-        summary = download_material(ARTIFACTS, BLOCKED, args.root)
+        summary = download_material(MATERIALS, BLOCKED, args.root)
         ensure_zcode(args.root.resolve(), args.work_dir.resolve() if args.work_dir else None, args.tag, args.node_version, args.keep_work)
-    except (ArtifactError, ZcodeBuildError, subprocess.CalledProcessError, OSError) as error:
+    except (MaterialError, ZcodeBuildError, subprocess.CalledProcessError, OSError) as error:
         print(f'material failed: {error}', file=sys.stderr, flush=True)
         raise SystemExit(1) from error
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)

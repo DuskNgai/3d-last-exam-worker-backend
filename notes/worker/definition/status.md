@@ -26,7 +26,7 @@ Worker 进程的状态由 `GET /status` 给出：
 | 完成态 | `succeeded` | 完成：该条评测成功，核验结果可以取回 |
 | 完成态 | `failed` | 失败：该条评测失败 |
 | 取消态 | `cancelled` | 取消：已取消该条评测 |
-| 存档态 | `archived` | 归档：运行目录与输出目录已删除，该条评测只留档案 |
+| 存档态 | `archived` | 归档：输入目录、运行目录与核验目录已删除，该条评测只留档案 |
 
 ### Control Transitions
 

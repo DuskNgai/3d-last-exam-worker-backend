@@ -1,0 +1,14 @@
+setup:
+  worker_address:
+  worker_port:
+  device_id:
+  device_token:
+  tls_certificate_file:
+  tls_key_file:
+  verification_environment:
+directory:
+  materials_directory:
+  input_directory:
+  run_directory:
+  verification_directory:
+  archive_directory:

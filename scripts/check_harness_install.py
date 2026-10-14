@@ -1,10 +1,10 @@
 """
 Install every harness distribution in an offline VM and report what runs.
 
-    python3 scripts/check_harness_install.py --base-image <base.qcow2> --run-dir <local run dir>
-        --harness-root <material root> --output-dir <report dir>
+    python scripts/check_harness_install.py --base-image <base image> --run-dir <run dir>
+        --harness-root <harness root> --output-dir <output dir>
 
-One overlay VM without network installs every selected harness through the same
+One overlay VM without network installs every harness through the same
 bundle machinery the agent run uses, then runs the entry point that
 sandbox.deploy.harness declares for that harness and records what it printed.
 The API relay and the model key never take part, so an install test needs
@@ -27,14 +27,12 @@ from common import (
     offline_vm,
     run_commands,
     stamp,
-    summarize,
     write_report,
 )
 
-from sandbox.deploy.deploy import DeployError, parse_spec
-from sandbox.deploy.harness import distribution_dir, ENTRY_POINTS, HarnessError, install_script, NON_PAYLOAD_NAMES
-from sandbox.deploy.qemu_vm import VmError
-from sandbox.qga import QgaClient, QgaError
+from sandbox.deploy.deploy import parse_spec
+from sandbox.deploy.harness import distribution_dir, ENTRY_POINTS, install_script, NON_PAYLOAD_NAMES
+from sandbox.qga import QgaClient
 
 GUEST_HARNESS: Final = '/task/harness'
 REPORT_NAME: Final = 'harness-install-report.json'
@@ -42,9 +40,6 @@ PROBE_ARGV: Final = (('--version',), ('--help',))
 PROBE_GUEST_LIMIT: Final = 20
 PROBE_TIMEOUT: Final = 45.0
 OUTPUT_LIMIT: Final = 400
-ERROR_LIMIT: Final = 1000
-
-VERDICT_INSTALL_FAILED: Final = 'install_failed'
 VERDICT_ENTRY_MISSING: Final = 'entry_missing'
 VERDICT_ENTRY_FAILED: Final = 'entry_failed'
 VERDICT_RUNNABLE: Final = 'runnable'
@@ -83,16 +78,21 @@ def _inspect(qga: QgaClient, entry: str) -> dict[str, object]:
 
     Returns:
         `summary` (dict[str, object]): File count, total size, top-level names, and the probe outcome.
+
+    Raises:
+        MaterialCheckError: The installed harness cannot be inspected.
     """
-    files = qga.run(['/bin/bash', '-c', f'find {GUEST_HARNESS} -type f | wc -l'], timeout=120.0)
-    size = qga.run(['/bin/bash', '-c', f'du -sb {GUEST_HARNESS} | cut -f1'], timeout=120.0)
-    top = qga.run(['/bin/bash', '-c', f'ls -1 {GUEST_HARNESS} | head -40'], timeout=120.0)
+    files = qga.run(['/bin/bash', '-o', 'pipefail', '-c', f'find {GUEST_HARNESS} -type f | wc -l'], timeout=120.0)
+    size = qga.run(['du', '-sb', GUEST_HARNESS], timeout=120.0)
+    top = qga.run(['ls', '-1', GUEST_HARNESS], timeout=120.0)
+    if files.exitcode != 0 or size.exitcode != 0 or top.exitcode != 0:
+        raise MaterialCheckError(f'cannot inspect installed harness at {GUEST_HARNESS}')
     target = f'{GUEST_HARNESS}/{entry}'
     present = qga.run(['/bin/bash', '-c', f'test -f {shlex.quote(target)}'], timeout=60.0).exitcode == 0
     return {
-        'file_count': int(files.stdout.decode().strip() or 0),
-        'total_bytes': int(size.stdout.decode().strip() or 0),
-        'top_level': top.stdout.decode(errors='replace').split(),
+        'file_count': int(files.stdout.decode().strip()),
+        'total_bytes': int(size.stdout.decode().split(maxsplit=1)[0]),
+        'top_level': top.stdout.decode(errors='replace').splitlines()[:40],
         'entry': entry,
         'entry_present': present,
         'probe': _probe(qga, target) if present else None
@@ -112,6 +112,9 @@ def _test_one(run_dir: Path, qga: QgaClient, harness_root: Path, installer: Path
 
     Returns:
         `record` (dict[str, object]): Spec, verdict, and the observed install details.
+
+    Raises:
+        MaterialCheckError: The previous harness directory cannot be cleared.
     """
     name, version = parse_spec(spec)
     record: dict[str, object] = {
@@ -119,31 +122,19 @@ def _test_one(run_dir: Path, qga: QgaClient, harness_root: Path, installer: Path
         'harness': name,
         'version': version
     }
-    try:
-        directory = distribution_dir(harness_root, name, version)
-    except HarnessError as error:
-        record.update({
-            'verdict': VERDICT_INSTALL_FAILED,
-            'error': summarize(str(error), ERROR_LIMIT, keep='head')
-        })
-        return record
+    directory = distribution_dir(harness_root, name, version)
     payload = next(path.name for path in sorted(directory.iterdir()) if path.is_file() and path.name not in NON_PAYLOAD_NAMES)
     record['payload'] = payload
     entry = _entry_path(name, payload)
-    try:
-        qga.run(['/bin/bash', '-c', f'rm -rf {GUEST_HARNESS}'], timeout=180.0)
-        install_bundle(run_dir, qga, spec, directory, installer)
-        record.update(_inspect(qga, entry))
-    except (DeployError, QgaError, TimeoutError, OSError) as error:
-        record.update({
-            'verdict': VERDICT_INSTALL_FAILED,
-            'error': summarize(str(error), ERROR_LIMIT, keep='head')
-        })
-        return record
+    cleared = qga.run(['/bin/bash', '-c', f'rm -rf {GUEST_HARNESS}'], timeout=180.0)
+    if cleared.exitcode != 0:
+        raise MaterialCheckError(f'cannot clear {GUEST_HARNESS}')
+    install_bundle(run_dir, qga, spec, directory, installer)
+    record.update(_inspect(qga, entry))
     probe = record['probe']
     if not record['entry_present']:
         record['verdict'] = VERDICT_ENTRY_MISSING
-    elif isinstance(probe, dict) and probe.get('exitcode') == 0:
+    elif isinstance(probe, dict) and probe['exitcode'] == 0:
         record['verdict'] = VERDICT_RUNNABLE
     else:
         record['verdict'] = VERDICT_ENTRY_FAILED
@@ -155,7 +146,6 @@ def check_harnesses(
     out_dir: Path,
     run_dir: Path,
     base_image: Path,
-    harnesses: list[str] | None = None,
     smp: int = 4,
     memory: int = 8192,
     accel: str = 'kvm',
@@ -163,7 +153,7 @@ def check_harnesses(
     keep_vm: bool = False
 ) -> dict[str, object]:
     """
-    Install every selected harness in one offline VM and report each outcome.
+    Install every harness under the root in one offline VM and report each outcome.
 
     Args:
         `harness_root` (Path): Directory of harness distributions, organized as <name>/<version>/<payload>,
@@ -171,7 +161,6 @@ def check_harnesses(
         `out_dir` (Path): Host directory receiving harness-install-report.json.
         `run_dir` (Path): VM run directory on local storage.
         `base_image` (Path): Frozen base qcow2 the overlay is created from; must be on local storage.
-        `harnesses` (list[str] | None): Specs as `<name>@<version>`; None scans harness_root.
         `smp` (int): Guest CPU count.
         `memory` (int): RAM in MiB.
         `accel` (str): `kvm` or `tcg`.
@@ -184,7 +173,9 @@ def check_harnesses(
     Raises:
         MaterialCheckError: The harness set is empty, or one of its names has no declared entry point.
     """
-    specs = list(harnesses) if harnesses else discover_specs(harness_root)
+    specs = discover_specs(harness_root)
+    if not specs:
+        raise MaterialCheckError('at least one harness is required')
     for spec in specs:
         name, _ = parse_spec(spec)
         if name not in ENTRY_POINTS:
@@ -197,18 +188,16 @@ def check_harnesses(
         'run_dir': str(run_dir),
         'specs': specs,
         'results': [],
-        'started_at': stamp(),
-        'error': None
+        'started_at': stamp()
     }
     try:
         with offline_vm(base_image, run_dir, accel=accel, smp=smp, memory=memory, vnc=vnc, keep_vm=keep_vm) as qga:
             for position, spec in enumerate(specs, start=1):
                 print(f'== harness {position}/{len(specs)}: {spec}', flush=True)
                 report['results'].append(_test_one(run_dir, qga, harness_root, installer, spec))
-    except (MaterialCheckError, HarnessError, DeployError, VmError, QgaError, OSError) as error:
-        report['error'] = str(error)
-    report['finished_at'] = stamp()
-    write_report(out_dir, REPORT_NAME, report)
+    finally:
+        report['finished_at'] = stamp()
+        write_report(out_dir, REPORT_NAME, report)
     return report
 
 
@@ -229,12 +218,6 @@ def main() -> None:
         help='directory of harness distributions, organized as <name>/<version>/<payload>, with install.sh at its root'
     )
     parser.add_argument('--output-dir', type=Path, required=True, help='host directory receiving harness-install-report.json')
-    parser.add_argument(
-        '--harness',
-        action='append',
-        default=None,
-        help='<name>@<version> spec to test, repeatable; defaults to every distribution under --harness-root'
-    )
     parser.add_argument('--smp', type=int, default=4)
     parser.add_argument('--memory', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
@@ -246,31 +229,22 @@ def main() -> None:
     parser.add_argument('--keep-vm', action='store_true')
     args = parser.parse_args()
     report_path = args.output_dir / REPORT_NAME
-    try:
-        report = check_harnesses(
-            args.harness_root,
-            args.output_dir,
-            args.run_dir,
-            args.base_image,
-            harnesses=args.harness,
-            smp=args.smp,
-            memory=args.memory,
-            accel=args.accel,
-            vnc=args.vnc,
-            keep_vm=args.keep_vm
-        )
-    except (MaterialCheckError, HarnessError, DeployError, OSError) as error:
-        print(f'error: {error}', file=sys.stderr)
-        raise SystemExit(1) from error
+    report = check_harnesses(
+        args.harness_root,
+        args.output_dir,
+        args.run_dir,
+        args.base_image,
+        smp=args.smp,
+        memory=args.memory,
+        accel=args.accel,
+        vnc=args.vnc,
+        keep_vm=args.keep_vm
+    )
     results = report['results']
     width = max((len(str(result['spec'])) for result in results), default=0)
     for result in results:
         print(f"{str(result['spec']):{width}}  {result['verdict']}")
     print(f'report: {report_path}', flush=True)
-    if report['error']:
-        print(f"error: {report['error']}", file=sys.stderr)
-    if report['error'] or any(result['verdict'] == VERDICT_INSTALL_FAILED for result in results):
-        raise SystemExit(1)
 
 
 if __name__ == '__main__':

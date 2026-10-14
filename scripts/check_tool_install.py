@@ -1,13 +1,13 @@
 """
 Install every tool bundle in an offline VM and report what each one answers.
 
-    python3 scripts/check_tool_install.py --base-image <base.qcow2> --run-dir <local run dir>
-        --tools-root <material root> --output-dir <report dir>
+    python scripts/check_tool_install.py --base-image <base image> --run-dir <run dir>
+        --tools-root <tool root> --output-dir <output dir>
 
-One overlay VM without network installs every selected tool through the same
+One overlay VM without network installs every tool through the same
 bundle machinery the agent run uses, so installation is judged by each bundle's
 own install.sh, whose self-check aborts the install on any mismatch. Install
-output goes to this process's stdout rather than to the report. Once every
+output is forwarded to this process's stdout and stderr. Once every
 install has finished, a second pass asks each tool on its own Python interface,
 which is the one probe the installers do not run for each other. Table order is
 install order: mujoco pushes its wheel into the interpreter the python tool
@@ -30,21 +30,16 @@ from common import (
     offline_vm,
     run_commands,
     stamp,
-    summarize,
     write_report,
 )
 
-from sandbox.deploy.deploy import DeployError, parse_spec
-from sandbox.deploy.qemu_vm import VmError
-from sandbox.qga import QgaClient, QgaError
+from sandbox.deploy.deploy import parse_spec
+from sandbox.qga import QgaClient
 
 REPORT_NAME: Final = 'tool-install-report.json'
 PROBE_GUEST_LIMIT: Final = 120
 PROBE_TIMEOUT: Final = 180.0
 OUTPUT_LIMIT: Final = 400
-ERROR_LIMIT: Final = 1000
-
-VERDICT_INSTALL_FAILED: Final = 'install_failed'
 VERDICT_PROBE_FAILED: Final = 'probe_failed'
 VERDICT_USABLE: Final = 'usable'
 VERDICT_INSTALLED: Final = 'installed'
@@ -67,20 +62,19 @@ PROBES: Final[dict[str, tuple[str, ...]]] = {
 }
 
 
-def _select(tools_root: Path, tools: list[str] | None) -> list[str]:
+def _select(tools_root: Path) -> list[str]:
     """
-    Return the specs to check, in table order.
+    Return every spec under the root, in table order.
 
     Args:
         `tools_root` (Path): Root of the tool material, organized as <name>/install.sh and <name>/<version>/.
-        `tools` (list[str] | None): Tool names to check; None selects every tool under the root.
 
     Returns:
         `specs` (list[str]): `<name>@<version>` specs in install order.
 
     Raises:
-        MaterialCheckError: A selected tool has no material, a tool holds more than one version directory, or a
-            tool under the root has no declared probe.
+        MaterialCheckError: The root holds no tool, holds multiple versions of one tool, pairs python without
+            mujoco or vice versa, misses an install.sh, or names a tool without a declared probe.
     """
     found: dict[str, list[str]] = {}
     for spec in discover_specs(tools_root):
@@ -92,14 +86,18 @@ def _select(tools_root: Path, tools: list[str] | None) -> list[str]:
     discovered = {
         name: f'{name}@{versions[0]}' for name, versions in found.items()
     }
-    selected = tools if tools is not None else list(discovered)
-    missing = sorted(name for name in selected if name not in discovered)
-    if missing:
-        raise MaterialCheckError(f'no tool material under {tools_root} for: {missing}')
-    unknown = sorted(name for name in set(selected) | set(discovered) if name not in PROBES)
+    if not discovered:
+        raise MaterialCheckError('at least one tool is required')
+    if ('python' in discovered) != ('mujoco' in discovered):
+        raise MaterialCheckError('python and mujoco must both be present: mujoco installs into the python tool')
+    unknown = sorted(name for name in discovered if name not in PROBES)
     if unknown:
         raise MaterialCheckError(f'tools without a declared probe: {unknown}; add them to PROBES')
-    return [discovered[name] for name in PROBES if name in selected]
+    for name in discovered:
+        script = tools_root / name / 'install.sh'
+        if not script.is_file():
+            raise MaterialCheckError(f'tool material must carry install.sh: {script}')
+    return [discovered[name] for name in PROBES if name in discovered]
 
 
 def _install_one(run_dir: Path, qga: QgaClient, tools_root: Path, spec: str) -> dict[str, object]:
@@ -113,7 +111,7 @@ def _install_one(run_dir: Path, qga: QgaClient, tools_root: Path, spec: str) -> 
         `spec` (str): `<name>@<version>` spec to install.
 
     Returns:
-        `record` (dict[str, object]): Spec, payloads, and either the install error or a pending verdict.
+        `record` (dict[str, object]): Spec, payloads, and successful installation status.
     """
     name, version = parse_spec(spec)
     record: dict[str, object] = {
@@ -123,21 +121,8 @@ def _install_one(run_dir: Path, qga: QgaClient, tools_root: Path, spec: str) -> 
     }
     directory = (tools_root / name).resolve()
     script = (directory / 'install.sh').resolve()
-    if not script.is_file():
-        record.update({
-            'verdict': VERDICT_INSTALL_FAILED,
-            'error': f'tool material must carry install.sh: {script}'
-        })
-        return record
-    try:
-        record['payloads'] = sorted(path.name for path in (directory / version).iterdir())
-        install_bundle(run_dir, qga, spec, directory, script)
-    except (DeployError, QgaError, TimeoutError, OSError) as error:
-        record.update({
-            'verdict': VERDICT_INSTALL_FAILED,
-            'error': summarize(str(error), ERROR_LIMIT, keep='head')
-        })
-        return record
+    record['payloads'] = sorted(path.name for path in (directory / version).iterdir())
+    install_bundle(run_dir, qga, spec, directory, script)
     record['install'] = 'ok'
     return record
 
@@ -157,7 +142,7 @@ def _probe_one(qga: QgaClient, record: dict[str, object]) -> None:
         return
     probe = run_commands(qga, commands, guest_timeout=PROBE_GUEST_LIMIT, call_timeout=PROBE_TIMEOUT, limit=OUTPUT_LIMIT)
     record['probe'] = probe
-    record['verdict'] = VERDICT_USABLE if probe.get('exitcode') == 0 else VERDICT_PROBE_FAILED
+    record['verdict'] = VERDICT_USABLE if probe['exitcode'] == 0 else VERDICT_PROBE_FAILED
 
 
 def check_tools(
@@ -165,7 +150,6 @@ def check_tools(
     out_dir: Path,
     run_dir: Path,
     base_image: Path,
-    tools: list[str] | None = None,
     smp: int = 4,
     memory: int = 8192,
     accel: str = 'kvm',
@@ -173,14 +157,13 @@ def check_tools(
     keep_vm: bool = False
 ) -> dict[str, object]:
     """
-    Install every selected tool in one offline VM, then probe each Python interface.
+    Install every tool under the root in one offline VM, then probe each Python interface.
 
     Args:
         `tools_root` (Path): Root of the tool material, organized as <name>/install.sh and <name>/<version>/.
         `out_dir` (Path): Host directory receiving tool-install-report.json.
         `run_dir` (Path): VM run directory on local storage.
         `base_image` (Path): Frozen base qcow2 the overlay is created from; must be on local storage.
-        `tools` (list[str] | None): Tool names to check; None selects every tool under the root.
         `smp` (int): Guest CPU count.
         `memory` (int): RAM in MiB.
         `accel` (str): `kvm` or `tcg`.
@@ -193,7 +176,7 @@ def check_tools(
     Raises:
         MaterialCheckError: The tool set is empty, or a tool has no material or no declared probe.
     """
-    specs = _select(tools_root, tools)
+    specs = _select(tools_root)
     out_dir.mkdir(parents=True, exist_ok=True)
     report: dict[str, object] = {
         'tools_root': str(tools_root),
@@ -201,22 +184,18 @@ def check_tools(
         'run_dir': str(run_dir),
         'specs': specs,
         'results': [],
-        'started_at': stamp(),
-        'error': None
+        'started_at': stamp()
     }
     try:
         with offline_vm(base_image, run_dir, accel=accel, smp=smp, memory=memory, vnc=vnc, keep_vm=keep_vm) as qga:
             for position, spec in enumerate(specs, start=1):
                 print(f'== tool {position}/{len(specs)}: {spec}', flush=True)
                 report['results'].append(_install_one(run_dir, qga, tools_root, spec))
-            # A second pass rather than a probe per install: python's probe imports the wheel mujoco installs into it.
             for record in report['results']:
-                if record.get('verdict') != VERDICT_INSTALL_FAILED:
-                    _probe_one(qga, record)
-    except (MaterialCheckError, DeployError, VmError, QgaError, OSError) as error:
-        report['error'] = str(error)
-    report['finished_at'] = stamp()
-    write_report(out_dir, REPORT_NAME, report)
+                _probe_one(qga, record)
+    finally:
+        report['finished_at'] = stamp()
+        write_report(out_dir, REPORT_NAME, report)
     return report
 
 
@@ -234,13 +213,6 @@ def main() -> None:
         '--tools-root', type=Path, required=True, help='root of the tool material, organized as <name>/install.sh and <name>/<version>/'
     )
     parser.add_argument('--output-dir', type=Path, required=True, help='host directory receiving tool-install-report.json')
-    parser.add_argument(
-        '--tool',
-        action='append',
-        default=None,
-        help='tool name to check, repeatable; defaults to every tool under --tools-root. python and mujoco '
-        'depend on each other, so select both or neither'
-    )
     parser.add_argument('--smp', type=int, default=4)
     parser.add_argument('--memory', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
@@ -252,32 +224,22 @@ def main() -> None:
     parser.add_argument('--keep-vm', action='store_true')
     args = parser.parse_args()
     report_path = args.output_dir / REPORT_NAME
-    try:
-        report = check_tools(
-            args.tools_root,
-            args.output_dir,
-            args.run_dir,
-            args.base_image,
-            tools=args.tool,
-            smp=args.smp,
-            memory=args.memory,
-            accel=args.accel,
-            vnc=args.vnc,
-            keep_vm=args.keep_vm
-        )
-    except (MaterialCheckError, DeployError, OSError) as error:
-        print(f'error: {error}', file=sys.stderr)
-        raise SystemExit(1) from error
+    report = check_tools(
+        args.tools_root,
+        args.output_dir,
+        args.run_dir,
+        args.base_image,
+        smp=args.smp,
+        memory=args.memory,
+        accel=args.accel,
+        vnc=args.vnc,
+        keep_vm=args.keep_vm
+    )
     results = report['results']
     width = max((len(str(result['spec'])) for result in results), default=0)
-    # An aborted run can leave records whose install finished but whose probe never ran; they read as failed.
     for result in results:
-        print(f"{str(result['spec']):{width}}  {result.get('verdict', VERDICT_INSTALL_FAILED)}")
+        print(f"{str(result['spec']):{width}}  {result['verdict']}")
     print(f'report: {report_path}', flush=True)
-    if report['error']:
-        print(f"error: {report['error']}", file=sys.stderr)
-    if report['error'] or any(result.get('verdict', VERDICT_INSTALL_FAILED) == VERDICT_INSTALL_FAILED for result in results):
-        raise SystemExit(1)
 
 
 if __name__ == '__main__':

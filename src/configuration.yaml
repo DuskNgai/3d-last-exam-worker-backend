@@ -10,5 +10,6 @@ directory:
   materials_directory:
   input_directory:
   run_directory:
+  output_directory:
   verification_directory:
   archive_directory:

@@ -13,7 +13,7 @@ Worker 进程的状态由 `GET /status` 给出：
 
 ## Evaluation Status
 
-每条评测的状态由 `GET /evaluation` 给出：
+每条评测每次尝试的状态由 `GET /evaluation` 给出。
 
 | 类别 | 状态 | 含义 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ Worker 进程的状态由 `GET /status` 给出：
 | 完成态 | `succeeded` | 完成：该条评测成功，核验结果可以取回 |
 | 完成态 | `failed` | 失败：该条评测失败 |
 | 取消态 | `cancelled` | 取消：已取消该条评测 |
-| 存档态 | `archived` | 归档：输入目录、运行目录与核验目录已删除，该条评测只留档案 |
+| 存档态 | `archived` | 归档：已归档该条评测 |
 
 ### Control Transitions
 
@@ -36,7 +36,7 @@ Worker 进程的状态由 `GET /status` 给出：
 | --- | --- | --- | --- | --- | --- |
 | 未完态 | 转为 `paused` | `paused` 转回暂停前阶段；其余不变，拒绝 | 转为 `cancelled` | 不变，拒绝 | 不变，拒绝 |
 | 完成态 | 不变，拒绝 | 不变，拒绝 | 转为 `cancelled` | 转为 `archived` | 不变，拒绝 |
-| 取消态 | 不变，拒绝 | 不变，拒绝 | 保持 `cancelled` | 不变，拒绝 | 全部删除 |
+| 取消态 | 不变，拒绝 | 不变，拒绝 | 保持 `cancelled` | 不变，拒绝 | 删除本次尝试 |
 | 存档态 | 不变，拒绝 | 不变，拒绝 | 转为 `cancelled` | 保持 `archived` | 不变，拒绝 |
 
 ## Error Code
@@ -47,15 +47,10 @@ Worker 进程的状态由 `GET /status` 给出：
 | --- | --- | --- |
 | 400 | `bad_request` | 请求字段缺失、类型错误或值不合格 |
 | 401 | `unauthorized` | 设备令牌缺失或不符 |
-| 404 | `not_found` | 评测号、输出或报告不存在 |
-| 409 | `missing_material` | 该条评测要用的 harness 版本或任务软件版本本机没有 |
-| 409 | `insufficient_resources` | 该条评测要求的资源本机满足不了 |
-| 409 | `attempt_conflict` | 上一次 attempt 的目录还在 |
-| 409 | `evaluation_not_finished` | 该条评测在未完态，输出与报告还不可取，也不能存档 |
-| 409 | `evaluation_finished` | 该条评测不在未完态，不能暂停 |
-| 409 | `evaluation_cancelled` | 该条评测已取消，不能存档 |
-| 409 | `evaluation_not_succeeded` | 该条评测失败或已取消，报告不可取 |
-| 409 | `evaluation_not_cancelled` | 该条评测不在取消态，不能删除 |
-| 409 | `evaluation_not_paused` | 该条评测未暂停，不能恢复 |
+| 404 | `not_found` | 指定的评测号与尝试号组合、输出或报告不存在 |
+| 409 | `invalid_state` | 指定尝试的状态不允许本次操作，或者同一评测的另一次尝试尚未结束 |
+| 409 | `reattempt_material_unavailable` | 原 Worker 上的共享输入缺失或校验不通过 |
 | 413 | `too_large` | 请求体超过上限（1 MB） |
-| 503 | `not_ready` | Worker 正在启动或停止，不收派发 |
+| 422 | `missing_material` | 该条评测要用的 harness 版本或工具版本本机没有 |
+| 422 | `insufficient_resources` | 该条评测要求的资源本机满足不了 |
+| 503 | `not_ready` | Worker 正在启动、停止，或 Master 心跳超时，请求当前不能执行 |

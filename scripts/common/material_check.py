@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 
 from sandbox.deploy.deploy import BundleConfig, GUEST_BUNDLES, install_bundles, parse_spec
 from sandbox.deploy.qemu_vm import create_overlay, qga_socket_path, run_lock, start_vm, stop_vm, wait_ready
-from sandbox.qga import QgaClient, QgaError
+from sandbox.qga import QgaClient
 
 CLEAN_TIMEOUT: Final = 180.0
 
@@ -90,7 +90,7 @@ def offline_vm(
     memory: int = 8192,
     vnc: str | None = None,
     keep_vm: bool = False
-) -> Generator[QgaClient]:
+) -> Generator[QgaClient, None, None]:
     """
     Boot one network-less VM from the frozen base image and tear it down afterwards.
 
@@ -106,16 +106,20 @@ def offline_vm(
     Yields:
         `qga` (QgaClient): Client for the running guest agent.
     """
-    with run_lock(run_dir):
-        try:
-            create_overlay(run_dir, base_image)
-            start_vm(run_dir, accel=accel, smp=smp, memory=memory, network='none', vnc=vnc)
-            wait_ready(run_dir)
-            yield QgaClient(qga_socket_path(run_dir))
-        finally:
-            stop_vm(run_dir)
-            if not keep_vm:
-                shutil.rmtree(run_dir, ignore_errors=True)
+    lock_acquired = False
+    try:
+        with run_lock(run_dir):
+            lock_acquired = True
+            try:
+                create_overlay(run_dir, base_image)
+                start_vm(run_dir, accel=accel, smp=smp, memory=memory, network='none', vnc=vnc)
+                wait_ready(run_dir)
+                yield QgaClient(qga_socket_path(run_dir))
+            finally:
+                stop_vm(run_dir)
+    finally:
+        if lock_acquired and not keep_vm:
+            shutil.rmtree(run_dir)
 
 
 def install_bundle(run_dir: Path, qga: QgaClient, spec: str, directory: Path, script: Path) -> None:
@@ -135,7 +139,9 @@ def install_bundle(run_dir: Path, qga: QgaClient, spec: str, directory: Path, sc
     """
     name, version = parse_spec(spec)
     target = shlex.quote(f'{GUEST_BUNDLES}/{name}')
-    qga.run(['/bin/bash', '-c', f'rm -rf {target}'], timeout=CLEAN_TIMEOUT)
+    cleared = qga.run(['/bin/bash', '-c', f'rm -rf {target}'], timeout=CLEAN_TIMEOUT)
+    if cleared.exitcode != 0:
+        raise MaterialCheckError(f'cannot clear guest bundle directory {target}: exit code {cleared.exitcode}')
     install_bundles(run_dir, [BundleConfig(name=name, path=directory, script=script, version=version)])
 
 
@@ -151,27 +157,21 @@ def run_commands(qga: QgaClient, commands: tuple[str, ...], *, guest_timeout: in
         `limit` (int): Characters of output to keep per candidate.
 
     Returns:
-        `record` (dict[str, object]): The command tried, its exitcode, and the output tail, or the error that
-        stopped it.
+        `record` (dict[str, object]): The last command tried, its exitcode, and the output tail.
+
+    Raises:
+        ValueError: No probe commands were supplied.
     """
-    record: dict[str, object] = {}
+    if not commands:
+        raise ValueError('at least one probe command is required')
     for command in commands:
         guest = f'timeout {guest_timeout} /usr/sbin/runuser -u agent -- /bin/bash -c {shlex.quote(command)} < /dev/null 2>&1'
-        try:
-            result = qga.run(['/bin/bash', '-c', guest], timeout=call_timeout)
-        except (QgaError, TimeoutError, OSError) as error:
-            # The candidate never ran, so a missing exit code must not read as a zero, and the record must not
-            # carry an earlier candidate's output next to this candidate's error.
-            return {
-                'command': command,
-                'exitcode': None,
-                'error': summarize(str(error), limit)
-            }
-        record.update({
+        result = qga.run(['/bin/bash', '-c', guest], timeout=call_timeout)
+        record = {
             'command': command,
             'exitcode': result.exitcode,
             'output': summarize(result.stdout.decode(errors='replace'), limit)
-        })
+        }
         if result.exitcode == 0:
             return record
     return record

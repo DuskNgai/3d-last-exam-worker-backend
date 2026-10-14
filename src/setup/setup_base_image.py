@@ -1,11 +1,14 @@
 """
 Build the Ubuntu desktop base image for QEMU sandboxes via unattended autoinstall.
 
+    python src/setup/setup_base_image.py --iso <iso> --out <out dir>
+
 A cloud-init seed drives subiquity, the installed disk is verified with an
 offline boot (QGA ping, OS facts, desktop screendump), then frozen read-only
 with a manifest.json recording hashes and guest facts.
 """
 
+import argparse
 from dataclasses import dataclass
 import datetime
 import hashlib
@@ -16,11 +19,14 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import sys
 import time
 from typing import Final
 
-from ..qemu_command import machine_flags
-from ..qga import QgaClient, QgaError, QmpClient
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from sandbox.qemu_command import machine_flags
+from sandbox.qga import QgaClient, QgaError, QmpClient
 
 BASE_IMAGE_DIR: Final = Path(__file__).resolve().parent / 'base_image'
 HARNESS_DEPS_FILE: Final = BASE_IMAGE_DIR / 'harness-deps.json'
@@ -662,7 +668,7 @@ def _write_manifest(
     logger.info('%s', json.dumps(manifest, indent=2))
 
 
-def build_base_image(config: BuildConfig) -> None:
+def setup_base_image(config: BuildConfig) -> None:
     """
     Run the full build: seed, unattended install, offline verification, freeze, manifest.
 
@@ -677,7 +683,7 @@ def build_base_image(config: BuildConfig) -> None:
     """
     _check_prerequisites(config)
     (config.out / 'seed' / 'cidata').mkdir(parents=True, exist_ok=True)
-    logger = logging.getLogger('build_base_image')
+    logger = logging.getLogger('setup_base_image')
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
     for handler in (logging.StreamHandler(), logging.FileHandler(config.out / 'seed' / 'build.log')):
@@ -698,3 +704,42 @@ def build_base_image(config: BuildConfig) -> None:
         logger.error('build failed: %s', error)
         raise
     logger.info('== Base image frozen: %s/base.qcow2 ==', config.out)
+
+
+def main() -> None:
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--iso', type=Path, required=True, help='path to the Ubuntu desktop ISO')
+    parser.add_argument(
+        '--iso-sha256',
+        default=None,
+        help='official sha256 for the ISO; the build fails when it does not match. '
+        'Without it the computed hash is only recorded in the manifest'
+    )
+    parser.add_argument('--out', type=Path, required=True, help='output directory for base.qcow2 and manifest.json')
+    parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM but the install takes hour-scale')
+    parser.add_argument('--smp', type=int, default=4)
+    parser.add_argument('--memory', type=int, default=8192)
+    parser.add_argument('--disk', default='64G')
+    parser.add_argument('--skip-install', action='store_true', help='reuse the existing base.qcow2 and skip to verification')
+    args = parser.parse_args()
+
+    config = BuildConfig(
+        iso=args.iso.resolve(),
+        iso_sha256=args.iso_sha256,
+        out=args.out.resolve(),
+        accel=args.accel,
+        smp=args.smp,
+        memory=args.memory,
+        disk=args.disk,
+        skip_install=args.skip_install
+    )
+    try:
+        setup_base_image(config)
+    except (BuildError, subprocess.CalledProcessError, QgaError, OSError) as error:
+        print(f'build failed: {error}', file=sys.stderr)
+        raise SystemExit(1) from error
+
+
+if __name__ == '__main__':
+    main()

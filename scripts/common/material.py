@@ -82,6 +82,9 @@ def sha256(path: Path) -> str:
 
     Returns:
         `digest` (str): Hex sha256 of the file content.
+
+    Raises:
+        OSError: The file cannot be opened or read.
     """
     digest = hashlib.sha256()
     with path.open('rb') as stream:
@@ -107,9 +110,16 @@ def _check_release(material: Material) -> None:
         raise MaterialError(f'{material.label} {material.version} is after the frozen cutoff: {material.release_utc}')
 
 
-def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_delay: int = 0) -> None:
+def fetch(
+    url: str,
+    destination: Path,
+    *,
+    expected_sha256: str | None = None,
+    retries: int = RETRY_COUNT,
+    retry_delay: int = 0
+) -> None:
     """
-    Download a URL to a path through a .part file, which is replaced only after a clean transfer.
+    Download a URL through a .part file, replacing the destination after validation.
 
     The download scripts come through here: the pinned tables call it with the default retry budget, the
     source build raises it because a build fetches tens of megabytes over a link that drops.
@@ -117,11 +127,14 @@ def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_dela
     Args:
         `url` (str): Source URL to fetch.
         `destination` (Path): Final path for the file; its parent directory must exist.
+        `expected_sha256` (str | None): Optional pinned digest checked before promotion.
         `retries` (int): curl's retry budget.
         `retry_delay` (int): Seconds curl waits between retries; omitted when zero.
 
     Raises:
-        MaterialError: A partial file from an earlier attempt is still there, or curl failed.
+        MaterialError: A partial file from an earlier attempt is still there, or the digest mismatches.
+        OSError: The partial file cannot be read, removed, or promoted.
+        subprocess.CalledProcessError: curl exits unsuccessfully.
     """
     partial = destination.with_name(destination.name + PARTIAL_SUFFIX)
     if partial.exists():
@@ -130,10 +143,12 @@ def fetch(url: str, destination: Path, *, retries: int = RETRY_COUNT, retry_dela
     if retry_delay:
         command += ['--retry-delay', str(retry_delay)]
     command += ['--retry-all-errors', '--connect-timeout', str(CONNECT_TIMEOUT_SECONDS), '--output', str(partial), url]
-    completed = subprocess.run(command)
-    if completed.returncode != 0:
-        partial.unlink(missing_ok=True)
-        raise MaterialError(f'download failed with exit code {completed.returncode}: {url}')
+    subprocess.run(command, check=True)
+    if expected_sha256 is not None:
+        actual = sha256(partial)
+        if actual != expected_sha256:
+            partial.unlink()
+            raise MaterialError(f'SHA-256 mismatch for {url}: expected {expected_sha256}, got {actual}')
     partial.replace(destination)
 
 
@@ -149,16 +164,15 @@ def _fetch(material: Material, destination: Path) -> bool:
         `written` (bool): True when bytes were written, False when the file was already there.
 
     Raises:
-        MaterialError: A partial file was left behind, or curl failed.
+        MaterialError: A partial file was left behind, or the digest mismatches.
+        OSError: The file cannot be read or created.
+        subprocess.CalledProcessError: curl exits unsuccessfully.
     """
     if destination.is_file():
         print(f'exists: {destination}', flush=True)
         return False
     print(f'download: {material.label} {material.version}', flush=True)
-    try:
-        fetch(material.url, destination)
-    except MaterialError as error:
-        raise MaterialError(f'{material.label} {material.version}: {error}') from error
+    fetch(material.url, destination, expected_sha256=material.sha256)
     return True
 
 
@@ -172,12 +186,14 @@ def _verify(material: Material, destination: Path) -> None:
 
     Raises:
         MaterialError: The digest does not match.
+        OSError: The file cannot be read, or the file command cannot be started.
+        subprocess.CalledProcessError: The file command exits unsuccessfully.
     """
     actual = sha256(destination)
     if actual != material.sha256:
         raise MaterialError(f'{material.label} {material.version} SHA-256 mismatch: expected {material.sha256}, got {actual}')
     print(f'verified: {material.label} {material.version} sha256={actual}', flush=True)
-    subprocess.run(['file', str(destination)], check=False)
+    subprocess.run(['file', str(destination)], check=True)
 
 
 def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...], root: Path) -> dict[str, int]:
@@ -193,7 +209,9 @@ def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...],
         `summary` (dict[str, int]): Counts of downloaded and already-present files.
 
     Raises:
-        MaterialError: A release is after the cutoff, a download failed, or a digest mismatched.
+        MaterialError: A release is after the cutoff, a partial download exists, or a digest mismatched.
+        OSError: A material file cannot be read, created, or promoted.
+        subprocess.CalledProcessError: curl or file exits unsuccessfully.
     """
     root = root.resolve()
     print(f'root: {root}', flush=True)
@@ -223,16 +241,15 @@ def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: 
         `description` (str): Description shown in the --help output.
 
     Raises:
-        SystemExit: The download failed, or --root was rejected.
+        SystemExit: Argument parsing fails.
+        MaterialError: A release is after the cutoff, a partial download exists, or a digest mismatched.
+        OSError: A material file cannot be read, created, or promoted.
+        subprocess.CalledProcessError: curl or file exits unsuccessfully.
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument(
         '--root', type=Path, default=Path.cwd(), help='material root the table paths are relative to; defaults to the working directory'
     )
     args = parser.parse_args()
-    try:
-        summary = download_material(table, blocked, args.root)
-    except (MaterialError, OSError) as error:
-        print(f'download failed: {error}', file=sys.stderr, flush=True)
-        raise SystemExit(1) from error
+    summary = download_material(table, blocked, args.root)
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)

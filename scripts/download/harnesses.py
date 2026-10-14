@@ -1,15 +1,18 @@
 """
-Download and verify the harness material, and build the distribution that is not downloadable.
+Download and verify the harness material, write the shared install script, and build the distribution that is not downloadable.
 
-    python3 scripts/download/harnesses.py --root <material root>
-    python3 scripts/download/harnesses.py --root <material root> --work-dir <scratch directory>
+    python scripts/download/harnesses.py --root <material root>
+    python scripts/download/harnesses.py --root <material root> --work-dir <work dir>
 
 The table pins each vendor distribution under harnesses/<name>/<version>/. Files
 already on disk are skipped and re-verified, so one run over a complete root is a
 full verification pass. ZCode is the exception: the vendor publishes no CLI
 distribution, so this script builds it from source into harnesses/zcode/<version>/
 when nothing is there, and otherwise checks the tarball against the manifest.json
-that build wrote. The Ubuntu ISO lives in isos.py and tool packages in tools.py.
+that build wrote. The shared install.sh the deploy step injects into every harness
+bundle is repository content at scripts/download/assets/install-harness.sh; each
+run refreshes the copy at harnesses/install.sh. The Ubuntu ISO lives in isos.py
+and tool packages in tools.py.
 """
 
 import argparse
@@ -24,7 +27,7 @@ from typing import Final
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common import Blocked, download_material, fetch, Material, MaterialError, sha256
+from common import Blocked, download_material, fetch, Material, sha256
 
 MATERIALS: Final = (
     Material(
@@ -158,6 +161,8 @@ SOURCE_URL_TEMPLATE: Final = 'https://codeload.github.com/zai-org/ZCode/tar.gz/r
 NODE_URL_TEMPLATE: Final = 'https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.gz'
 DEFAULT_TAG: Final = 'v3.14.3'
 DEFAULT_NODE_VERSION: Final = '24.14.0'
+INSTALL_SCRIPT_SOURCE: Final = Path(__file__).resolve().parent / 'assets' / 'install-harness.sh'
+INSTALL_SCRIPT_NAME: Final = 'install.sh'
 # mise.toml pins the toolchain; corepack activates exactly this pnpm.
 PNPM_VERSION: Final = '10.33.2'
 DIST_BASE_URL_PLACEHOLDER: Final = 'https://example.invalid/zcode/'
@@ -180,6 +185,34 @@ BUILD_ENVIRONMENT: Final = {
 
 class ZcodeBuildError(RuntimeError):
     """A build step failed."""
+
+
+def write_install_script(root: Path) -> Path:
+    """
+    Write the shared harness install script into the material root.
+
+    The script is repository content carried at assets/install-harness.sh; the
+    deploy step looks for it at harnesses/install.sh, so every download pass
+    refreshes that copy. An up-to-date copy is left untouched.
+
+    Args:
+        `root` (Path): Material root the harness tree lives under.
+
+    Returns:
+        `destination` (Path): The script path inside the material root.
+
+    Raises:
+        OSError: The source or destination file cannot be read or written.
+    """
+    content = INSTALL_SCRIPT_SOURCE.read_bytes()
+    destination = root.resolve() / 'harnesses' / INSTALL_SCRIPT_NAME
+    if destination.is_file() and destination.read_bytes() == content:
+        print(f'unchanged: {destination}', flush=True)
+        return destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(content)
+    print(f'wrote: {destination}', flush=True)
+    return destination
 
 
 @dataclass(frozen=True)
@@ -218,16 +251,15 @@ def _download(url: str, destination: Path) -> Path:
         `destination` (Path): The downloaded file path.
 
     Raises:
-        ZcodeBuildError: The transfer failed, or a partial file from an earlier attempt is still there.
+        MaterialError: A partial file from an earlier attempt is still there.
+        OSError: The destination directory cannot be created.
+        subprocess.CalledProcessError: curl exits unsuccessfully.
     """
     if destination.is_file():
         return destination
     destination.parent.mkdir(parents=True, exist_ok=True)
     print(f'== download {url}', flush=True)
-    try:
-        fetch(url, destination, retries=DOWNLOAD_RETRIES, retry_delay=DOWNLOAD_RETRY_DELAY)
-    except MaterialError as error:
-        raise ZcodeBuildError(f'{url}: {error}') from error
+    fetch(url, destination, retries=DOWNLOAD_RETRIES, retry_delay=DOWNLOAD_RETRY_DELAY)
     print(f'   {destination.name}: sha256={sha256(destination)}', flush=True)
     return destination
 
@@ -240,6 +272,10 @@ def _run(command: list[str], cwd: Path, env: dict[str, str]) -> None:
         `command` (list[str]): Command and arguments to execute.
         `cwd` (Path): Working directory for the command.
         `env` (dict[str, str]): Environment for the command.
+
+    Raises:
+        OSError: The command cannot be started.
+        subprocess.CalledProcessError: The command exits unsuccessfully.
     """
     print(f'== {" ".join(command)}', flush=True)
     subprocess.run(command, cwd=cwd, env=env, check=True)
@@ -257,6 +293,8 @@ def _toolchain(config: ZcodeBuildConfig) -> Path:
 
     Raises:
         ZcodeBuildError: The archive did not unpack to the expected directory.
+        OSError: The toolchain files cannot be created or inspected.
+        subprocess.CalledProcessError: tar exits unsuccessfully.
     """
     root = config.work_dir / 'toolchain'
     bin_dir = root / f'node-v{config.node_version}-linux-x64' / 'bin'
@@ -282,13 +320,16 @@ def _prepare_source(config: ZcodeBuildConfig) -> Path:
 
     Raises:
         ZcodeBuildError: The archive did not unpack to the expected directory.
+        OSError: The source files cannot be created or inspected.
+        subprocess.CalledProcessError: tar exits unsuccessfully.
     """
     root = config.work_dir / 'source'
     source = root / f'ZCode-{config.tag.lstrip("v")}'
     if (source / 'package.json').is_file():
         return source
     archive = _download(SOURCE_URL_TEMPLATE.format(tag=config.tag), root / f'ZCode-{config.tag}.tar.gz')
-    shutil.rmtree(source, ignore_errors=True)
+    if source.exists():
+        shutil.rmtree(source)
     subprocess.run(['tar', '-xzf', str(archive), '-C', str(root)], check=True)
     if not (source / 'package.json').is_file():
         raise ZcodeBuildError(f'source tag {config.tag} did not unpack to {source}')
@@ -339,7 +380,7 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     (config.out_dir / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(f'== {destination} ({destination.stat().st_size} bytes) sha256={manifest[0]["sha256"]}', flush=True)
     if not config.keep_work:
-        shutil.rmtree(config.work_dir, ignore_errors=True)
+        shutil.rmtree(config.work_dir)
     return {
         'version': version,
         'manifest': manifest,
@@ -364,8 +405,10 @@ def ensure_zcode(root: Path, work_dir: Path | None, tag: str, node_version: str,
         `keep_work` (bool): Keep the scratch directory instead of removing it on success.
 
     Raises:
-        ZcodeBuildError: The distribution is absent and no work directory was given, the
-            manifest is unreadable, or the tarball does not match its recorded digest.
+        ZcodeBuildError: The distribution is absent and no work directory was given, the manifest is invalid,
+            or the tarball does not match its recorded digest.
+        OSError: The manifest or distribution file cannot be read.
+        ValueError: The manifest is not valid JSON.
     """
     out_dir = root / 'harnesses' / PACKAGE_NAME / tag.lstrip('v')
     manifest_path = out_dir / 'manifest.json'
@@ -377,10 +420,7 @@ def ensure_zcode(root: Path, work_dir: Path | None, tag: str, node_version: str,
         result = build_zcode(ZcodeBuildConfig(out_dir=out_dir, work_dir=work_dir, tag=tag, node_version=node_version, keep_work=keep_work))
         print(f'built: zcode {result["version"]} from {result["tag"]}', flush=True)
         return
-    try:
-        manifest = json.loads(manifest_path.read_text())
-    except (OSError, ValueError) as error:
-        raise ZcodeBuildError(f'cannot read {manifest_path}: {error}') from error
+    manifest = json.loads(manifest_path.read_text())
     if not isinstance(manifest, list):
         raise ZcodeBuildError(f'{manifest_path} must hold a list of file records')
     for item in manifest:
@@ -409,12 +449,9 @@ def main() -> None:
     parser.add_argument('--node-version', default=DEFAULT_NODE_VERSION, help='Node version from the ZCode repository mise.toml')
     parser.add_argument('--keep-work', action='store_true', help='keep the ZCode scratch directory')
     args = parser.parse_args()
-    try:
-        summary = download_material(MATERIALS, BLOCKED, args.root)
-        ensure_zcode(args.root.resolve(), args.work_dir.resolve() if args.work_dir else None, args.tag, args.node_version, args.keep_work)
-    except (MaterialError, ZcodeBuildError, subprocess.CalledProcessError, OSError) as error:
-        print(f'material failed: {error}', file=sys.stderr, flush=True)
-        raise SystemExit(1) from error
+    summary = download_material(MATERIALS, BLOCKED, args.root)
+    write_install_script(args.root)
+    ensure_zcode(args.root.resolve(), args.work_dir.resolve() if args.work_dir else None, args.tag, args.node_version, args.keep_work)
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)
 
 

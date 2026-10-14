@@ -1,7 +1,7 @@
 """
 Download and verify the ISO the base image is built from.
 
-    python3 scripts/download/isos.py --root <material root>
+    python scripts/download/isos.py --root <material root>
 
 The table pins the Ubuntu desktop image under isos/. The build checks the same
 digest again when it is given --iso-sha256, so the value here and the one in

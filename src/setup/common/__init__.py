@@ -1,11 +1,12 @@
-"""Shared plumbing for the scripts under scripts/.
+"""Shared plumbing for Worker deployment commands.
 
-`material` runs one pinned download table and is shared by the download scripts under scripts/download/;
+`material` runs one pinned download table and is shared by the download scripts under src/setup/download/;
 `material_check` owns the offline VM, bundle upload, and command probing shared by the two install checks.
 """
 
 from .material import Blocked, download_material, fetch, Material, MaterialError, run, sha256
 from .material_check import (
+    discover_base_image,
     discover_specs,
     install_bundle,
     MaterialCheckError,
@@ -21,6 +22,7 @@ __all__ = [
     'Material',
     'MaterialCheckError',
     'MaterialError',
+    'discover_base_image',
     'discover_specs',
     'download_material',
     'fetch',

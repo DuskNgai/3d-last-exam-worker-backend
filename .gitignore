@@ -3,6 +3,3 @@ __pycache__/
 artifacts
 framework
 tmp
-
-.env
-.keys.json

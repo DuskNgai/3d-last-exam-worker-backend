@@ -1,27 +1,25 @@
 """
-Download and verify the tool packages, their offline dependency closures, and their install scripts.
+Download and verify the tool packages, their offline wheel closures, and their install scripts.
 
-    python scripts/download/tools.py --root <material root>
+    python src/setup/download/tools.py --config src/configuration.yaml
 
 The MATERIALS table pins each vendor distribution under tools/<name>/<version>/.
-Two tools need companion files the vendor does not ship as one package: python
-carries a Miniconda bootstrap plus the conda packages its interpreter is created
-from, and python and mujoco carry offline wheels. Each tool's install.sh is
-repository content under scripts/download/assets/, refreshed into
-tools/<name>/install.sh on every run; conda-packages.json is regenerated from the
-downloaded conda packages. Harness distributions live in harnesses.py.
+The python tool is a python-build-standalone tarball; python and mujoco carry
+offline wheels their install scripts feed to pip --no-index. Each tool's
+install.sh is repository content under src/setup/download/assets/, refreshed
+into tools/<name>/install.sh on every run. Harness distributions live in
+harnesses.py.
 """
 
 import argparse
-import hashlib
-import json
 from pathlib import Path
 import sys
 from typing import Final
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import download_material, Material
+from configuration import read_materials_directory
+from setup.common import download_material, Material
 
 MATERIALS: Final = (
     Material(
@@ -52,10 +50,11 @@ MATERIALS: Final = (
     Material(
         'Python',
         '3.11.16',
-        '2026-08-27T16:21:53Z',
-        'https://repo.anaconda.com/pkgs/main/linux-64/python-3.11.16-h17756b0_0.conda',
-        'a095fd0449140bf8c6e77d251d9a425081fc00498337101134ba27e8355cac60',
-        'tools/python/3.11.16/python-3.11.16-linux-64.conda'
+        '2026-09-24T19:19:40Z',
+        'https://github.com/astral-sh/python-build-standalone/releases/download/20260924/'
+        'cpython-3.11.16%2B20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
+        '68c6739376b65258dee5058ccf6777232fe38d31a578965ae8bda327ec7da3a8',
+        'tools/python/3.11.16/cpython-3.11.16+20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
     ),
     Material(
         'SDF View',
@@ -69,120 +68,8 @@ MATERIALS: Final = (
 
 PYTHON_VERSION: Final = '3.11.16'
 MUJOCO_VERSION: Final = '3.14.0'
-CONDA_MAIN: Final = 'https://repo.anaconda.com/pkgs/main'
 ASSETS: Final = Path(__file__).resolve().parent / 'assets'
 TOOL_NAMES: Final = ('blender', 'freecad', 'mujoco', 'python', 'sdf-view')
-
-# The bootstrap installer that creates the interpreter prefix offline.
-PYTHON_BOOTSTRAP: Final = (
-    Material(
-        'Miniconda3 bootstrap',
-        'py314_26.7.1-1',
-        '2026-08-28T18:39:27Z',
-        'https://repo.anaconda.com/miniconda/Miniconda3-py314_26.7.1-1-Linux-x86_64.sh',
-        'e8b25b92b262499141c5bd57a98d3c008024185fa951494b9cd9b6d94e72338b',
-        f'tools/python/{PYTHON_VERSION}/miniconda.sh'
-    ),
-)
-
-# The interpreter closure, in install order: conda create --offline consumes exactly this list
-# through the generated conda-packages.json. Rows are (file, sha256, release, noarch); noarch
-# entries live under pkgs/main/noarch, the rest under pkgs/main/linux-64. Release times are the
-# official repository's publication timestamps.
-PYTHON_CONDA: Final = (
-    ('_libgcc_mutex-0.1-main.conda', '476626712f60e5ef0fe04c354727152b1ee5285d57ccd3575c7be930122bd051', '2025-02-06T00:18:30Z', False),
-    ('_openmp_mutex-5.1-52_gnu.conda', '2f2c16a33f51ba032e8d4929b4d2e9173d81931d8d280a4a4a85a2412e8bdaf0', '2026-05-18T19:16:02Z', False),
-    ('bzip2-1.0.8-h5eee18b_6.conda', '235f266d5f9c3c61748bb1af0eff21bc7ed2a2a356b97ff28d9c1135039b08b0', '2025-02-05T15:03:11Z', False),
-    (
-        'ca-certificates-2026.8.13-h06a4308_0.conda',
-        'b026cdcb69009db86e4f079d81ffa503b773508a02bd6fd57527d45a95a32be9',
-        '2026-08-27T14:18:56Z',
-        False
-    ),
-    (
-        'ld_impl_linux-64-2.44-h9e0c5a2_3.conda',
-        '4a4875ab4354d4a1bf1695850efad8787d7063387ed6b5aec5ecb659869e2590',
-        '2026-03-11T19:09:27Z',
-        False
-    ),
-    ('libexpat-2.8.5-h7354ed3_1.conda', '4dfc5550ed842c5334cb2ec3985c7f848af52004cfed29a84512f12056c4ccfd', '2026-09-24T20:26:28Z', False),
-    ('libffi-3.4.8-h06d3fd0_3.conda', 'd000d5d1843f472c7c8f750af2113013c74e9dcdcbe58220568d9d37df5a8607', '2026-06-16T18:37:33Z', False),
-    ('libgcc-15.2.0-h69a1729_8.conda', '10fbca6e0cc0da1018f82f3c92e3841e734e704dbfee5df88ae652a49d8b402f', '2026-05-19T19:28:17Z', False),
-    (
-        'libgcc-ng-15.2.0-h166f726_8.conda',
-        '3b4b734309a58b3ded42e01aecfbb91b029ad22d768a4c9f0f4f0006a3172203',
-        '2026-05-19T19:28:17Z',
-        False
-    ),
-    ('libnsl-2.0.0-h5eee18b_0.conda', '34fbadc1e86ee37b19b98799b4f806d8be205e9c0220bdb76598f0295961812e', '2025-02-05T04:10:37Z', False),
-    (
-        'libstdcxx-15.2.0-h39759b7_8.conda',
-        '30b7a96c0f1f527d16ec9ec7f80404f34d4b916332cca0634111ed077d7fc870',
-        '2026-05-19T19:28:17Z',
-        False
-    ),
-    ('libuuid-1.41.5-h5eee18b_0.conda', '2a401aafabac51b7736cfe12d2ab205d29052640ea8183253c9d0a8e7ed0d49a', '2025-02-05T05:28:07Z', False),
-    ('libxcb-1.17.0-h9b100fa_0.conda', 'f9cd1564fc83261ddba7496404f18143d4f8fda52e42c040005c1b1ad3e47f56', '2025-04-30T14:13:21Z', False),
-    ('libzlib-1.3.2-h47b2149_0.conda', '02b0d3bad12d15c668f06a32283907608bcfb49ca40d9d09d3bcfe6bd4765f31', '2026-06-09T12:58:53Z', False),
-    ('ncurses-6.6-hfaaeb4e_0.conda', 'a080cfac9b51bb62dcd54823622e602cd8cd8d67406c76cbbdfc0602f9e822b8', '2026-08-24T09:20:26Z', False),
-    ('openssl-3.5.8-h1b28b03_0.conda', '4774aa6ce576e3ffc5a87056eae5d09280122ffcce2d2468e94fb89f003ce39f', '2026-08-31T12:25:53Z', False),
-    (
-        'packaging-26.3-py311h06a4308_0.conda',
-        '106ce589ceb59bda4b510fdf6ec5bea19060e1b772a5a3f4c232766f8528ca23',
-        '2026-08-21T14:33:34Z',
-        False
-    ),
-    ('pip-26.2.1-pyhc872135_0.conda', '64a7339fb4b85160f4c7fff98e1ad9d2a9b84f01e954a7bc5c6b2dea3bb98bfd', '2026-08-28T15:09:12Z', True),
-    (
-        'pthread-stubs-0.3-h47b2149_2.conda',
-        'f9ccf45615a75712116b79a4b02fbc69e681b4e82d65a0dd11430fac3244623c',
-        '2026-07-24T13:17:35Z',
-        False
-    ),
-    ('python-3.11.16-h17756b0_0.conda', 'a095fd0449140bf8c6e77d251d9a425081fc00498337101134ba27e8355cac60', '2026-08-27T16:21:53Z', False),
-    ('readline-8.3-hc2a1206_0.conda', '0a438fa74f2776bde137017d6c18214b5da65b557f6a59f877fa4e091582f789', '2025-08-06T13:19:20Z', False),
-    (
-        'setuptools-83.0.0-py311h06a4308_0.conda',
-        '3407df5998ddf3398a08e4a4def4d2c653e252d824272bdc1bada2a1e8d284da',
-        '2026-07-14T13:37:11Z',
-        False
-    ),
-    ('sqlite-3.53.4-h795bf6d_0.conda', '839f97490251e076b64ff70521a2437e8835a0a42728d39562e8ede0addcf18f', '2026-09-10T14:22:50Z', False),
-    ('tk-8.6.15-h54e0aa7_0.conda', 'a3bcd301ddd0bdb2f52f9bd3274fabe3c33d43ed61e58ee657efeac01b4be157', '2025-08-15T10:10:00Z', False),
-    ('tzdata-2026c-he532380_0.conda', '52adc4b0a9cce2ffb8ad319d54b7c940ae7961f7caf7ce6851eec4b3f542c368', '2026-07-13T14:11:16Z', True),
-    (
-        'wheel-0.47.0-py311h06a4308_0.conda',
-        '48c0706884c4a81c720332b2f8ceab77eccb48ae157d5d45ad597f981495c91e',
-        '2026-06-18T12:16:11Z',
-        False
-    ),
-    (
-        'xorg-libx11-1.8.13-h65de747_0.conda',
-        '5aa71cae22365e5d882dc983a58cc805a689d1e4a370a8030bd4d1b784bdf532',
-        '2026-08-28T08:28:15Z',
-        False
-    ),
-    (
-        'xorg-libxau-1.0.12-h9b100fa_0.conda',
-        '68acf87da69a0237d5083798a9cc9b89d2887a84a5323aa740006b53cd5159ef',
-        '2025-04-29T20:52:34Z',
-        False
-    ),
-    (
-        'xorg-libxdmcp-1.1.5-h9b100fa_0.conda',
-        '459c8497d1c22b020404b481fa12011abeb27d8eefde37dd4ac9f5a443fd5ac7',
-        '2025-04-30T05:56:56Z',
-        False
-    ),
-    (
-        'xorg-xorgproto-2025.1-h47b2149_0.conda',
-        '1fc1b37830927279255d31775497f8abf5b872e924ed48fedab129ee6a75657a',
-        '2026-08-27T15:32:30Z',
-        False
-    ),
-    ('xz-5.8.4-h140a991_0.conda', 'd9383d80b09c9cbb3b1b689f173e84d6e75a4a61ecd4eebee6dae0adc6441793', '2026-09-22T11:17:43Z', False),
-    ('zlib-1.3.2-h47b2149_0.conda', '4bb61142e8fe22510086c1030e1ff3ad4888ebf9bf0a11e9931594e8549a9d42', '2026-06-09T12:58:53Z', False),
-)
 
 # Basic third-party libraries the python tool installs into its interpreter, pinned to the
 # versions the probe imports. Rows are (file, sha256, release, url); digests, upload times,
@@ -296,29 +183,6 @@ MUJOCO_WHEELS: Final = (
 BLOCKED: Final = ()
 
 
-class ToolError(RuntimeError):
-    """A tool closure file is missing or a generated file cannot be written."""
-
-
-def _conda_table(rows: tuple[tuple[str, str, str, bool], ...], directory: str) -> tuple[Material, ...]:
-    """
-    Build Material rows for the conda closure.
-
-    Args:
-        `rows` (tuple): (file name, sha256, release time, noarch) tuples in install order.
-        `directory` (str): Closure directory relative to the material root.
-
-    Returns:
-        `table` (tuple[Material, ...]): One pinned row per conda package.
-    """
-    table = []
-    for filename, sha256, release, noarch in rows:
-        name, version, _build = filename.removesuffix('.conda').rsplit('-', 2)
-        url = f'{CONDA_MAIN}/{"noarch" if noarch else "linux-64"}/{filename}'
-        table.append(Material(name, version, release, url, sha256, f'{directory}/{filename}'))
-    return tuple(table)
-
-
 def _wheel_table(rows: tuple[tuple[str, str, str, str], ...], directory: str) -> tuple[Material, ...]:
     """
     Build Material rows for one wheels closure.
@@ -335,26 +199,6 @@ def _wheel_table(rows: tuple[tuple[str, str, str, str], ...], directory: str) ->
         name, version = filename.split('-')[: 2]
         table.append(Material(name, version, release, url, sha256, f'{directory}/{filename}'))
     return tuple(table)
-
-
-def _md5(path: Path) -> str:
-    """
-    Return the hex md5 of a file, streaming the reads.
-
-    Args:
-        `path` (Path): File to hash.
-
-    Returns:
-        `digest` (str): Hex md5 of the file content.
-
-    Raises:
-        OSError: The file cannot be opened or read.
-    """
-    digest = hashlib.md5()
-    with path.open('rb') as stream:
-        for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b''):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def write_install_scripts(root: Path) -> None:
@@ -378,44 +222,6 @@ def write_install_scripts(root: Path) -> None:
         print(f'wrote: {destination}', flush=True)
 
 
-def write_conda_packages(root: Path) -> Path:
-    """
-    Regenerate conda-packages.json from the downloaded conda packages.
-
-    The install script turns each record into an explicit-spec line with the md5
-    fragment conda expects, so the md5 is computed here from the verified file
-    rather than pinned by hand.
-
-    Args:
-        `root` (Path): Material root the tools tree lives under.
-
-    Returns:
-        `destination` (Path): The written metadata file.
-
-    Raises:
-        ToolError: A conda package from the table is missing.
-        OSError: The file cannot be read or written.
-    """
-    directory = root.resolve() / 'tools' / 'python' / PYTHON_VERSION
-    records = []
-    for filename, _sha256, _release, _noarch in PYTHON_CONDA:
-        path = directory / 'conda' / filename
-        if not path.is_file():
-            raise ToolError(f'conda package missing: {path}; run the download first')
-        records.append({
-            'file': filename,
-            'md5': _md5(path)
-        })
-    content = (json.dumps(records, indent=1) + '\n').encode()
-    destination = directory / 'conda-packages.json'
-    if destination.is_file() and destination.read_bytes() == content:
-        print(f'unchanged: {destination}', flush=True)
-        return destination
-    destination.write_bytes(content)
-    print(f'wrote: {destination}', flush=True)
-    return destination
-
-
 def tables() -> tuple[tuple[Material, ...], ...]:
     """
     Return every download table of this module, in download order.
@@ -425,8 +231,6 @@ def tables() -> tuple[tuple[Material, ...], ...]:
     """
     return (
         MATERIALS,
-        PYTHON_BOOTSTRAP,
-        _conda_table(PYTHON_CONDA, f'tools/python/{PYTHON_VERSION}/conda'),
         _wheel_table(PYTHON_WHEELS, f'tools/python/{PYTHON_VERSION}/wheels'),
         _wheel_table(MUJOCO_WHEELS, f'tools/mujoco/{MUJOCO_VERSION}/wheels'),
     )
@@ -435,11 +239,9 @@ def tables() -> tuple[tuple[Material, ...], ...]:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        '--root', type=Path, default=Path.cwd(), help='material root the table paths are relative to; defaults to the working directory'
-    )
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     args = parser.parse_args()
-    root = args.root.resolve()
+    root = read_materials_directory(args.config)
     downloaded = 0
     existing = 0
     for position, table in enumerate(tables()):
@@ -447,7 +249,6 @@ def main() -> None:
         downloaded += summary['downloaded']
         existing += summary['existing']
     write_install_scripts(root)
-    write_conda_packages(root)
     print(f'done: {downloaded} downloaded, {existing} already present', flush=True)
 
 

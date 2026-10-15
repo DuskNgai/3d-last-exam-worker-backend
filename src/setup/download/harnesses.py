@@ -1,8 +1,8 @@
 """
 Download and verify the harness material, write the shared install script, and build the distribution that is not downloadable.
 
-    python scripts/download/harnesses.py --root <material root>
-    python scripts/download/harnesses.py --root <material root> --work-dir <work dir>
+    python src/setup/download/harnesses.py --config src/configuration.yaml
+    python src/setup/download/harnesses.py --config src/configuration.yaml --work-dir <work dir>
 
 The table pins each vendor distribution under harnesses/<name>/<version>/. Files
 already on disk are skipped and re-verified, so one run over a complete root is a
@@ -10,7 +10,7 @@ full verification pass. ZCode is the exception: the vendor publishes no CLI
 distribution, so this script builds it from source into harnesses/zcode/<version>/
 when nothing is there, and otherwise checks the tarball against the manifest.json
 that build wrote. The shared install.sh the deploy step injects into every harness
-bundle is repository content at scripts/download/assets/install-harness.sh; each
+bundle is repository content at src/setup/download/assets/install-harness.sh; each
 run refreshes the copy at harnesses/install.sh. The Ubuntu ISO lives in isos.py
 and tool packages in tools.py.
 """
@@ -23,11 +23,13 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Final
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import Blocked, download_material, fetch, Material, sha256
+from configuration import read_materials_directory
+from setup.common import Blocked, download_material, fetch, Material, sha256
 
 MATERIALS: Final = (
     Material(
@@ -149,11 +151,6 @@ BLOCKED: Final = (
         'ZCODE_DIST_BASE_URL has no public default, so this script builds the command line version '
         'from tag v3.14.3 into harnesses/zcode/3.14.3/'
     ),
-    Blocked(
-        'Muse Code install script',
-        'https://dev.meta.ai/install.sh',
-        'official endpoint failed from this host with TLS timeout; no script file was archived'
-    ),
 )
 
 GITHUB_REPOSITORY: Final = 'https://github.com/zai-org/ZCode'
@@ -161,6 +158,8 @@ SOURCE_URL_TEMPLATE: Final = 'https://codeload.github.com/zai-org/ZCode/tar.gz/r
 NODE_URL_TEMPLATE: Final = 'https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.gz'
 DEFAULT_TAG: Final = 'v3.14.3'
 DEFAULT_NODE_VERSION: Final = '24.14.0'
+DEFAULT_WORK_DIR: Final = Path(tempfile.gettempdir())
+SCRATCH_NAME: Final = 'zcode-build'
 INSTALL_SCRIPT_SOURCE: Final = Path(__file__).resolve().parent / 'assets' / 'install-harness.sh'
 INSTALL_SCRIPT_NAME: Final = 'install.sh'
 # mise.toml pins the toolchain; corepack activates exactly this pnpm.
@@ -222,17 +221,15 @@ class ZcodeBuildConfig:
 
     Attributes:
         out_dir (Path): Harness version directory for the tarball and manifest.json.
-        work_dir (Path): Scratch directory for source, toolchain, and build output, on local storage.
+        work_dir (Path): Dedicated scratch directory for source, toolchain, and build output; created and removed by the build.
         tag (str): Repository tag to build.
         node_version (str): Node version from the repository's mise.toml.
-        keep_work (bool): Keep the scratch directory instead of removing it on success.
     """
 
     out_dir: Path
     work_dir: Path
     tag: str = DEFAULT_TAG
     node_version: str = DEFAULT_NODE_VERSION
-    keep_work: bool = False
 
 
 def _download(url: str, destination: Path) -> Path:
@@ -379,8 +376,7 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     }]
     (config.out_dir / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     print(f'== {destination} ({destination.stat().st_size} bytes) sha256={manifest[0]["sha256"]}', flush=True)
-    if not config.keep_work:
-        shutil.rmtree(config.work_dir)
+    shutil.rmtree(config.work_dir)
     return {
         'version': version,
         'manifest': manifest,
@@ -389,35 +385,31 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     }
 
 
-def ensure_zcode(root: Path, work_dir: Path | None, tag: str, node_version: str, keep_work: bool) -> None:
+def ensure_zcode(root: Path, work_dir: Path, tag: str, node_version: str) -> None:
     """
     Build the ZCode distribution when it is absent, otherwise verify it in place.
 
     A build writes manifest.json next to the tarball, so a later run over a
     complete root verifies the tarball against that record rather than rebuilding.
-    The build itself needs a scratch directory of about 6 GB and the network.
+    The build itself needs about 6 GB and the network; it works only inside the
+    SCRATCH_NAME subdirectory under work_dir and removes just that subdirectory on success.
 
     Args:
         `root` (Path): Material root the distribution is written under.
-        `work_dir` (Path | None): Scratch directory for a build, or None to verify an existing distribution.
+        `work_dir` (Path): Directory the build scratch subdirectory is created under.
         `tag` (str): Repository tag of the distribution.
         `node_version` (str): Node version from the repository's mise.toml.
-        `keep_work` (bool): Keep the scratch directory instead of removing it on success.
 
     Raises:
-        ZcodeBuildError: The distribution is absent and no work directory was given, the manifest is invalid,
-            or the tarball does not match its recorded digest.
+        ZcodeBuildError: The manifest is invalid, or the tarball does not match its recorded digest.
         OSError: The manifest or distribution file cannot be read.
         ValueError: The manifest is not valid JSON.
     """
     out_dir = root / 'harnesses' / PACKAGE_NAME / tag.lstrip('v')
     manifest_path = out_dir / 'manifest.json'
     if not manifest_path.is_file():
-        if work_dir is None:
-            raise ZcodeBuildError(
-                f'{out_dir} holds no manifest.json to verify; pass --work-dir to build zcode {tag} from source, which needs about 6 GB'
-            )
-        result = build_zcode(ZcodeBuildConfig(out_dir=out_dir, work_dir=work_dir, tag=tag, node_version=node_version, keep_work=keep_work))
+        scratch = work_dir / SCRATCH_NAME
+        result = build_zcode(ZcodeBuildConfig(out_dir=out_dir, work_dir=scratch, tag=tag, node_version=node_version))
         print(f'built: zcode {result["version"]} from {result["tag"]}', flush=True)
         return
     manifest = json.loads(manifest_path.read_text())
@@ -436,22 +428,21 @@ def ensure_zcode(root: Path, work_dir: Path | None, tag: str, node_version: str,
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        '--root', type=Path, default=Path.cwd(), help='material root the table paths are relative to; defaults to the working directory'
-    )
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     parser.add_argument(
         '--work-dir',
         type=Path,
-        default=None,
-        help='scratch directory for the ZCode build, about 6 GB on local storage; needed only when that distribution is absent'
+        default=DEFAULT_WORK_DIR,
+        help='directory the ZCode build scratch is created under, about 6 GB on local storage; used only when that '
+        'distribution is absent, defaults to the system temp directory'
     )
     parser.add_argument('--tag', default=DEFAULT_TAG, help='ZCode repository tag to build')
     parser.add_argument('--node-version', default=DEFAULT_NODE_VERSION, help='Node version from the ZCode repository mise.toml')
-    parser.add_argument('--keep-work', action='store_true', help='keep the ZCode scratch directory')
     args = parser.parse_args()
-    summary = download_material(MATERIALS, BLOCKED, args.root)
-    write_install_script(args.root)
-    ensure_zcode(args.root.resolve(), args.work_dir.resolve() if args.work_dir else None, args.tag, args.node_version, args.keep_work)
+    root = read_materials_directory(args.config)
+    summary = download_material(MATERIALS, BLOCKED, root)
+    write_install_script(root)
+    ensure_zcode(root, args.work_dir.resolve(), args.tag, args.node_version)
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)
 
 

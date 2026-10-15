@@ -1,7 +1,7 @@
 """
 Build the Ubuntu desktop base image for QEMU sandboxes via unattended autoinstall.
 
-    python src/setup/setup_base_image.py --iso <iso> --out <out dir>
+    python src/setup/setup_base_image.py --config src/configuration.yaml --iso <iso name> --out <image name>
 
 A cloud-init seed drives subiquity, the installed disk is verified with an
 offline boot (QGA ping, OS facts, desktop screendump), then frozen read-only
@@ -25,6 +25,7 @@ from typing import Final
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from configuration import read_materials_directory
 from sandbox.qemu_command import machine_flags
 from sandbox.qga import QgaClient, QgaError, QmpClient
 
@@ -709,25 +710,30 @@ def setup_base_image(config: BuildConfig) -> None:
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--iso', type=Path, required=True, help='path to the Ubuntu desktop ISO')
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
+    parser.add_argument('--iso', required=True, help='Ubuntu desktop ISO filename under materials_directory/isos')
     parser.add_argument(
         '--iso-sha256',
         default=None,
         help='official sha256 for the ISO; the build fails when it does not match. '
         'Without it the computed hash is only recorded in the manifest'
     )
-    parser.add_argument('--out', type=Path, required=True, help='output directory for base.qcow2 and manifest.json')
+    parser.add_argument('--out', required=True, help='image directory name under materials_directory/images')
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM but the install takes hour-scale')
     parser.add_argument('--smp', type=int, default=4)
     parser.add_argument('--memory', type=int, default=8192)
     parser.add_argument('--disk', default='64G')
     parser.add_argument('--skip-install', action='store_true', help='reuse the existing base.qcow2 and skip to verification')
     args = parser.parse_args()
+    for name in (args.iso, args.out):
+        if not name or name in {'.', '..'} or Path(name).name != name:
+            parser.error(f'expected a filename or directory name: {name}')
+    materials_directory = read_materials_directory(args.config)
 
     config = BuildConfig(
-        iso=args.iso.resolve(),
+        iso=materials_directory / 'isos' / args.iso,
         iso_sha256=args.iso_sha256,
-        out=args.out.resolve(),
+        out=materials_directory / 'images' / args.out,
         accel=args.accel,
         smp=args.smp,
         memory=args.memory,

@@ -2,10 +2,6 @@
 
 Setup 在 Worker 部署时完成。
 
-## Configuration
-
-确保配置文件的各项已填入，见 [configuration.md](../definition/configuration.md)。
-
 ## Worker Python Environment
 
 在仓库根目录创建并启用 Worker 的 Conda 环境：
@@ -17,6 +13,10 @@ conda activate 3dle-worker
 
 该环境供 Worker 进程和部署命令使用。
 
+## Configuration
+
+配置文件及配置项见 [configuration.md](../definition/configuration.md)，确保必要的配置项填好。
+
 ## Identity
 
 Master 签发的设备标识与设备令牌、本机生成的 TLS 自签证书与私钥。步骤见 [identity-setup.md](identity-setup.md)。
@@ -26,10 +26,10 @@ Master 签发的设备标识与设备令牌、本机生成的 TLS 自签证书�
 评测所需材料及对应的下载命令见 [materials.md](../definition/materials.md)。部署时可用统一脚本一次下载全部材料：
 
 ```sh
-python scripts/setup/materials.py --config src/configuration.yaml
+python src/setup/materials.py --config src/configuration.yaml
 ```
 
-下载默认直连各官方源。网络受限时按渠道绕开：
+下载默认直连各官方源，网络受限时按渠道绕开：
 
 - HTTP 下载走代理，在命令前带 `https_proxy` / `http_proxy` 环境变量；
 - Python 包下载换 PyPI 镜像源，设 `PIP_INDEX_URL`；

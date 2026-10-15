@@ -1,7 +1,7 @@
 """
 Shared plumbing for the offline material checks.
 
-check_harness_install.py and check_tool_install.py each boot one network-less VM from the frozen base image,
+check/harness_install.py and check/tool_install.py each boot one network-less VM from the frozen base image,
 push every selected material bundle through the same bundle machinery a real agent run uses, and record what
 came back. What each check probes afterwards differs, so only the parts that do not differ live here.
 """
@@ -13,10 +13,7 @@ import json
 from pathlib import Path
 import shlex
 import shutil
-import sys
 from typing import Final
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src'))
 
 from sandbox.deploy.deploy import BundleConfig, GUEST_BUNDLES, install_bundles, parse_spec
 from sandbox.deploy.qemu_vm import create_overlay, qga_socket_path, run_lock, start_vm, stop_vm, wait_ready
@@ -78,6 +75,27 @@ def discover_specs(root: Path) -> list[str]:
     if not specs:
         raise MaterialCheckError(f'no material distribution under {root}')
     return specs
+
+
+def discover_base_image(root: Path) -> Path:
+    """
+    Return the single base image under a material root.
+
+    Args:
+        `root` (Path): Material root holding images/<name>/base.qcow2.
+
+    Returns:
+        `base_image` (Path): The only base image under the images directory.
+
+    Raises:
+        MaterialCheckError: The images directory holds no base image, or holds more than one.
+    """
+    found = sorted(path for path in root.glob('images/*/base.qcow2') if path.is_file())
+    if not found:
+        raise MaterialCheckError(f'no base image under {root}/images')
+    if len(found) > 1:
+        raise MaterialCheckError(f'more than one base image under {root}/images: {[str(path) for path in found]}')
+    return found[0]
 
 
 @contextlib.contextmanager

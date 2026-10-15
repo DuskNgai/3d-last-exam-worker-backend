@@ -1,7 +1,7 @@
 """
 Generate the worker's TLS self-signed certificate and private key.
 
-    python scripts/setup/identity.py --config src/configuration.yaml
+    python src/setup/identity.py --config src/configuration.yaml
 
 The device ID and the two output paths come from the setup group of the
 configuration file; the certificate's SHA256 fingerprint is printed for
@@ -13,15 +13,16 @@ import hashlib
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 import yaml
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from configuration import ConfigurationError
+
 CERTIFICATE_DAYS = 3650
 KEY_BITS = 2048
-
-
-class ConfigError(RuntimeError):
-    """The configuration file lacks a setup string the generation needs."""
 
 
 class IdentityError(RuntimeError):
@@ -39,7 +40,7 @@ def read_identity_settings(config_path: Path) -> tuple[str, Path, Path]:
         `settings` (tuple[str, Path, Path]): Device ID, certificate path, and key path.
 
     Raises:
-        ConfigError: Any of the three strings is missing or empty under setup.
+        ConfigurationError: Any of the three strings is missing or empty under setup.
         OSError: The configuration file cannot be read.
         yaml.YAMLError: The configuration file is not valid YAML.
     """
@@ -48,7 +49,7 @@ def read_identity_settings(config_path: Path) -> tuple[str, Path, Path]:
     setup = setup if isinstance(setup, dict) else {}
     missing = [key for key in ('device_id', 'tls_certificate_file', 'tls_key_file') if not setup.get(key)]
     if missing:
-        raise ConfigError(f'{config_path} must hold strings under "setup": {", ".join(missing)}')
+        raise ConfigurationError(f'{config_path} must hold strings under "setup": {", ".join(missing)}')
     return setup['device_id'], Path(setup['tls_certificate_file']), Path(setup['tls_key_file'])
 
 
@@ -73,23 +74,25 @@ def generate_certificate(device_id: str, certificate_file: Path, key_file: Path)
             raise IdentityError(f'refusing to overwrite existing file: {path}')
     certificate_file.parent.mkdir(parents=True, exist_ok=True)
     key_file.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run([
-        'openssl',
-        'req',
-        '-x509',
-        '-newkey',
-        f'rsa:{KEY_BITS}',
-        '-nodes',
-        '-days',
-        str(CERTIFICATE_DAYS),
-        '-subj',
-        f'/CN={device_id}',
-        '-keyout',
-        str(key_file),
-        '-out',
-        str(certificate_file)
-    ],
-                   check=True)
+    subprocess.run(
+        [
+            'openssl',
+            'req',
+            '-x509',
+            '-newkey',
+            f'rsa:{KEY_BITS}',
+            '-nodes',
+            '-days',
+            str(CERTIFICATE_DAYS),
+            '-subj',
+            f'/CN={device_id}',
+            '-keyout',
+            str(key_file),
+            '-out',
+            str(certificate_file)
+        ],
+        check=True,
+    )
     key_file.chmod(0o600)
 
 
@@ -117,7 +120,7 @@ def main() -> None:
 
     Raises:
         SystemExit: Argument parsing fails.
-        ConfigError: The configuration lacks a needed setup string.
+        ConfigurationError: The configuration lacks a needed setup string.
         IdentityError: openssl is missing, or a destination already exists.
         OSError: A configuration or output file cannot be read or written.
         yaml.YAMLError: The configuration file is not valid YAML.

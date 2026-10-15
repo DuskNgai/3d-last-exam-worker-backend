@@ -1,8 +1,8 @@
 """
 Install every tool bundle in an offline VM and report what each one answers.
 
-    python scripts/check_tool_install.py --base-image <base image> --run-dir <run dir>
-        --tools-root <tool root> --output-dir <output dir>
+    python src/setup/check/tool_install.py --config src/configuration.yaml
+        --run-dir <run dir> --output-dir <output dir>
 
 One overlay VM without network installs every tool through the same
 bundle machinery the agent run uses, so installation is judged by each bundle's
@@ -21,9 +21,11 @@ from pathlib import Path
 import sys
 from typing import Final
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import (
+from configuration import read_materials_directory
+from setup.common import (
+    discover_base_image,
     discover_specs,
     install_bundle,
     MaterialCheckError,
@@ -202,17 +204,20 @@ def check_tools(
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base-image', type=Path, required=True, help='frozen base qcow2, on local storage')
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     parser.add_argument(
         '--run-dir',
         type=Path,
         required=True,
-        help='VM run directory for transient state, on local storage; deleted after the check unless --keep-vm'
+        help='VM run directory for transient state, on local storage; deleted after the check unless --keep-vm; '
+        'keep it outside the configured run_directory'
     )
     parser.add_argument(
-        '--tools-root', type=Path, required=True, help='root of the tool material, organized as <name>/install.sh and <name>/<version>/'
+        '--output-dir',
+        type=Path,
+        required=True,
+        help='host directory receiving tool-install-report.json; keep it outside the configured output_directory'
     )
-    parser.add_argument('--output-dir', type=Path, required=True, help='host directory receiving tool-install-report.json')
     parser.add_argument('--smp', type=int, default=4)
     parser.add_argument('--memory', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
@@ -223,12 +228,13 @@ def main() -> None:
     )
     parser.add_argument('--keep-vm', action='store_true')
     args = parser.parse_args()
+    materials = read_materials_directory(args.config)
     report_path = args.output_dir / REPORT_NAME
     report = check_tools(
-        args.tools_root,
+        materials / 'tools',
         args.output_dir,
         args.run_dir,
-        args.base_image,
+        discover_base_image(materials),
         smp=args.smp,
         memory=args.memory,
         accel=args.accel,

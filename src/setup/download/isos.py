@@ -1,7 +1,7 @@
 """
 Download and verify the ISO the base image is built from.
 
-    python scripts/download/isos.py --root <material root>
+    python src/setup/download/isos.py --config src/configuration.yaml
 
 The table pins the Ubuntu desktop image under isos/. The build checks the same
 digest again when it is given --iso-sha256, so the value here and the one in
@@ -13,9 +13,9 @@ from pathlib import Path
 import sys
 from typing import Final
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import Material, run
+from setup.common import Material, run
 
 MATERIALS: Final = (
     Material(

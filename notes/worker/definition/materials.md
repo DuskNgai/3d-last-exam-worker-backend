@@ -8,7 +8,7 @@
 
 | 镜像 | 局部路径 | 官方地址 | SHA256 |
 | --- | --- | --- | --- |
-| `ubuntu-24.04.5.1-desktop-amd64.iso` | `isos/ubuntu-24.04.5.1-desktop-amd64.iso` | [Link](https://releases.ubuntu.com/24.04/ubuntu-24.04.5.1-desktop-amd64.iso) | `4da4a0c9035da8e68a59a838674f403f0a54472c78a83b4fb7f78d03588f85a7` |
+| `ubuntu-24.04.5.1-desktop-amd64.iso` | `isos/ubuntu-24.04.5.1-desktop-amd64.iso` | [Link](https://releases.ubuntu.com/24.04.5/ubuntu-24.04.5.1-desktop-amd64.iso) | `4da4a0c9035da8e68a59a838674f403f0a54472c78a83b4fb7f78d03588f85a7` |
 
 此外还有一个相关的目录：
 
@@ -17,7 +17,7 @@
 ### Downloading Script
 
 ```sh
-python scripts/download/isos.py --root <材料目录>
+python src/setup/download/isos.py --config src/configuration.yaml
 ```
 
 ## Harnesses
@@ -39,12 +39,12 @@ python scripts/download/isos.py --root <材料目录>
 | Muse Code | `1.4.0-R4161.1` | `harnesses/muse-code/1.4.0-R4161.1/muse-x86-linux` | [Link](https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=1.4.0-R4161.1&file=muse-x86-linux) | `1b68bd4518d53a2aaff063915df4d141b0a205e6d79038299d04e3a14e85a5b9` | `2026-09-28` |  |
 | Qwen Code | `0.24.5` | `harnesses/qwen-code/0.24.5/qwen-code-linux-x64.tar.gz` | [Link](https://github.com/QwenLM/qwen-code/releases/download/v0.24.5/qwen-code-linux-x64.tar.gz) | `61490a0fe061d9fd539f238ef2b6a133ea203eeb1682f65b21b6af2c1c428869` | `2026-09-24` |  |
 | TRAE CLI | `0.120.52` | `harnesses/trae-cli/0.120.52/trae-cli_0.120.52_linux_amd64.tar.gz` | [Link](https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/trae-cli_0.120.52_linux_amd64.tar.gz) | `b92505d7ebfe1956387f4c9368bc66cfbdeb3b5e81ce773e2b0cbca2fb3e4c39` | `2026-08-12` |  |
-| ZCode | `3.14.3` | `harnesses/zcode/3.14.3/zcode-3.14.3.tar.gz` | 本地构建（[源码](https://github.com/zai-org/ZCode)） |  | `2026-09-28` | 官方无命令行版发行包，从源码构建，SHA256 以构建时写出的 manifest 为准 |
+| ZCode | `3.14.3` | `harnesses/zcode/3.14.3/zcode-3.14.3.tar.gz` | 本地构建（[源码](https://github.com/zai-org/ZCode)） |  | `2026-09-24` | 官方无命令行版发行包，从源码构建，SHA256 以构建时写出的 manifest 为准 |
 
 ### Downloading Script
 
 ```sh
-python scripts/download/harnesses.py --root <材料目录>
+python src/setup/download/harnesses.py --config src/configuration.yaml
 ```
 
 ## Tools
@@ -56,11 +56,11 @@ python scripts/download/harnesses.py --root <材料目录>
 | Blender | `5.2.2` | `tools/blender/5.2.2/blender-5.2.2-linux-x64.tar.xz` | [Link](https://download.blender.org/release/Blender5.2/blender-5.2.2-linux-x64.tar.xz) | `84098912789dc450e95697c4184fb8a90acbe5111c2ba4aede3fecb57806a168` | `2026-09-15` |
 | FreeCAD | `1.1.3` | `tools/freecad/1.1.3/FreeCAD_1.1.3-Linux-x86_64-py311.AppImage` | [Link](https://github.com/FreeCAD/FreeCAD/releases/download/1.1.3/FreeCAD_1.1.3-Linux-x86_64-py311.AppImage) | `3a853eb69ee595f779f2255dbf80a765926981d8ff68903cefee4dfb03a8f5ef` | `2026-07-25` |
 | MuJoCo | `3.14.0` | `tools/mujoco/3.14.0/mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl` | [Link](https://files.pythonhosted.org/packages/4e/8e/1e50dc6db3c99a5a02642e253641bddef9b1b7c65527660baaae83eb3375/mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl) | `922983dfdf88d29f4eb0f451a1d18867156d9fc97e3df6e63b9933cc0eba4d38` | `2026-09-22` |
-| Python | `3.11.16` | `tools/python/3.11.16/python-3.11.16-linux-64.conda` | [Link](https://repo.anaconda.com/pkgs/main/linux-64/python-3.11.16-h17756b0_0.conda) | `a095fd0449140bf8c6e77d251d9a425081fc00498337101134ba27e8355cac60` | `2026-08-27` |
+| Python | `3.11.16` | `tools/python/3.11.16/cpython-3.11.16+20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz` | [Link](https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz) | `68c6739376b65258dee5058ccf6777232fe38d31a578965ae8bda327ec7da3a8` | `2026-09-24` |
 | SDF View | `0.2.0` | `tools/sdf-view/0.2.0/sdf-view-x86_64-unknown-linux-gnu.tar.gz` | [Link](https://github.com/d-itu/sdf-view/releases/download/v0.2.0/sdf-view-x86_64-unknown-linux-gnu.tar.gz) | `6bea659124f0c135476b53e11b433f1f1e0a7502b0fe02d47043100a9e87e0e9` | `2026-09-26` |
 
 ### Downloading Script
 
 ```sh
-python scripts/download/tools.py --root <材料目录>
+python src/setup/download/tools.py --config src/configuration.yaml
 ```

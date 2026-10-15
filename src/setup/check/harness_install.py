@@ -1,15 +1,15 @@
 """
 Install every harness distribution in an offline VM and report what runs.
 
-    python scripts/check_harness_install.py --base-image <base image> --run-dir <run dir>
-        --harness-root <harness root> --output-dir <output dir>
+    python src/setup/check/harness_install.py --config src/configuration.yaml
+        --run-dir <run dir> --output-dir <output dir>
 
 One overlay VM without network installs every harness through the same
 bundle machinery the agent run uses, then runs the entry point that
 sandbox.deploy.harness declares for that harness and records what it printed.
-The API relay and the model key never take part, so an install test needs
-neither a working endpoint nor a credential table. The VM and bundle plumbing is shared with
-scripts/check_tool_install.py through scripts/common/.
+The API relay and the model key never take part, so an install check needs
+neither a working endpoint nor a credential table. The VM and bundle plumbing
+is shared with src/setup/check/tool_install.py through src/setup/common/.
 """
 
 import argparse
@@ -18,9 +18,11 @@ import shlex
 import sys
 from typing import Final
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from common import (
+from configuration import read_materials_directory
+from setup.common import (
+    discover_base_image,
     discover_specs,
     install_bundle,
     MaterialCheckError,
@@ -204,20 +206,20 @@ def check_harnesses(
 def main() -> None:
     """CLI entry point."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--base-image', type=Path, required=True, help='frozen base qcow2, on local storage')
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     parser.add_argument(
         '--run-dir',
         type=Path,
         required=True,
-        help='VM run directory for transient state, on local storage; deleted after the test unless --keep-vm'
+        help='VM run directory for transient state, on local storage; deleted after the test unless --keep-vm; '
+        'keep it outside the configured run_directory'
     )
     parser.add_argument(
-        '--harness-root',
+        '--output-dir',
         type=Path,
         required=True,
-        help='directory of harness distributions, organized as <name>/<version>/<payload>, with install.sh at its root'
+        help='host directory receiving harness-install-report.json; keep it outside the configured output_directory'
     )
-    parser.add_argument('--output-dir', type=Path, required=True, help='host directory receiving harness-install-report.json')
     parser.add_argument('--smp', type=int, default=4)
     parser.add_argument('--memory', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
@@ -228,12 +230,13 @@ def main() -> None:
     )
     parser.add_argument('--keep-vm', action='store_true')
     args = parser.parse_args()
+    materials = read_materials_directory(args.config)
     report_path = args.output_dir / REPORT_NAME
     report = check_harnesses(
-        args.harness_root,
+        materials / 'harnesses',
         args.output_dir,
         args.run_dir,
-        args.base_image,
+        discover_base_image(materials),
         smp=args.smp,
         memory=args.memory,
         accel=args.accel,

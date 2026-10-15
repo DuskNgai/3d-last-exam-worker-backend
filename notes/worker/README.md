@@ -17,6 +17,8 @@ Worker 是评测的执行者。评测分为两个阶段：运行与核验。本�
 
 2. [setup/identity-setup.md](setup/identity-setup.md)：Worker 身份的安装手册。
 3. [setup/qemu-setup.md](setup/qemu-setup.md)：QEMU/KVM 沙盒的安装与配置。
+4. [setup/check-harness-install.md](setup/check-harness-install.md)：harness 发行包在冻结的基础镜像里逐个安装。
+5. [setup/check-tool-install.md](setup/check-tool-install.md)：工具在冻结的基础镜像里逐个安装并探一遍接口。
 
 ### Main
 

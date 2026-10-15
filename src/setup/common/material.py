@@ -1,7 +1,7 @@
 """
 Download and verify pinned material files.
 
-Shared by the download scripts under scripts/download/: each supplies its own
+Shared by the download scripts under src/setup/download/: each supplies its own
 table and this module runs it. Every path in a table is relative to a material
 root, so the same table fills both the shared store and a local copy.
 
@@ -19,6 +19,8 @@ from pathlib import Path
 import subprocess
 import sys
 from typing import Final
+
+from configuration import read_materials_directory
 
 CUTOFF_UTC: Final = '2026-09-25T23:59:59+00:00'
 PARTIAL_SUFFIX: Final = '.part'
@@ -233,7 +235,7 @@ def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...],
 
 def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: str) -> None:
     """
-    Parse --root and run one table, reporting the summary.
+    Read the configured materials directory and run one table.
 
     Args:
         `table` (tuple[Material, ...]): Pinned materials to fetch and verify.
@@ -247,9 +249,7 @@ def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: 
         subprocess.CalledProcessError: curl or file exits unsuccessfully.
     """
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument(
-        '--root', type=Path, default=Path.cwd(), help='material root the table paths are relative to; defaults to the working directory'
-    )
+    parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     args = parser.parse_args()
-    summary = download_material(table, blocked, args.root)
+    summary = download_material(table, blocked, read_materials_directory(args.config))
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)

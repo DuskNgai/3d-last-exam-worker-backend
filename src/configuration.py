@@ -1,7 +1,6 @@
 """Read shared Worker paths from the configuration file."""
 
 from pathlib import Path
-
 import yaml
 
 

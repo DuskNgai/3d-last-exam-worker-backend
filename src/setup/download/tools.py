@@ -32,42 +32,42 @@ MATERIALS: Final = (
     ),
     Material(
         'FreeCAD',
-        '1.1.3',
-        '2026-07-25T04:53:36Z',
-        'https://github.com/FreeCAD/FreeCAD/releases/download/1.1.3/FreeCAD_1.1.3-Linux-x86_64-py311.AppImage',
-        '3a853eb69ee595f779f2255dbf80a765926981d8ff68903cefee4dfb03a8f5ef',
-        'tools/freecad/1.1.3/FreeCAD_1.1.3-Linux-x86_64-py311.AppImage'
+        '1.1.4',
+        '2026-09-28T13:58:35Z',
+        'https://github.com/FreeCAD/FreeCAD/releases/download/1.1.4/FreeCAD_1.1.4-Linux-x86_64-py311.AppImage',
+        'f6dc6ba676e5ac96a565ebc8d657232f94c6158e85b4352141bd1a46f6b43434',
+        'tools/freecad/1.1.4/FreeCAD_1.1.4-Linux-x86_64-py311.AppImage'
     ),
     Material(
         'MuJoCo',
-        '3.14.0',
-        '2026-09-22T17:30:24.940590Z',
-        'https://files.pythonhosted.org/packages/4e/8e/1e50dc6db3c99a5a02642e253641bddef9b1b7c65527660baaae83eb3375/'
-        'mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
-        '922983dfdf88d29f4eb0f451a1d18867156d9fc97e3df6e63b9933cc0eba4d38',
-        'tools/mujoco/3.14.0/mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
+        '3.16.0',
+        '2026-10-14T10:31:19.055677Z',
+        'https://files.pythonhosted.org/packages/fa/54/9d5d12a5cf979e4cbb164fc00879dc9e5dbd9811186a0846be22243f973d/'
+        'mujoco-3.16.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+        '9990aecfe442a516d0595e5762f89da83431ed46fd353bee1e135e3a7140a551',
+        'tools/mujoco/3.16.0/mujoco-3.16.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
     ),
     Material(
         'Python',
-        '3.11.16',
-        '2026-09-24T19:19:40Z',
-        'https://github.com/astral-sh/python-build-standalone/releases/download/20260924/'
-        'cpython-3.11.16%2B20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
-        '68c6739376b65258dee5058ccf6777232fe38d31a578965ae8bda327ec7da3a8',
-        'tools/python/3.11.16/cpython-3.11.16+20260924-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+        '3.11.17',
+        '2026-10-14T02:06:09Z',
+        'https://github.com/astral-sh/python-build-standalone/releases/download/20261013/'
+        'cpython-3.11.17%2B20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
+        '3b8e5a248bcc351265ffe68f5e457668a2e09c99a47f81f658988c7d3d107522',
+        'tools/python/3.11.17/cpython-3.11.17+20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
     ),
     Material(
         'SDF View',
         '0.2.0',
-        'UNKNOWN',
+        '2026-09-26T10:46:10Z',
         'https://github.com/d-itu/sdf-view/releases/download/v0.2.0/sdf-view-x86_64-unknown-linux-gnu.tar.gz',
         '6bea659124f0c135476b53e11b433f1f1e0a7502b0fe02d47043100a9e87e0e9',
         'tools/sdf-view/0.2.0/sdf-view-x86_64-unknown-linux-gnu.tar.gz'
     ),
 )
 
-PYTHON_VERSION: Final = '3.11.16'
-MUJOCO_VERSION: Final = '3.14.0'
+PYTHON_VERSION: Final = '3.11.17'
+MUJOCO_VERSION: Final = '3.16.0'
 ASSETS: Final = Path(__file__).resolve().parent / 'assets'
 TOOL_NAMES: Final = ('blender', 'freecad', 'mujoco', 'python', 'sdf-view')
 
@@ -143,11 +143,11 @@ MUJOCO_WHEELS: Final = (
         'glfw-2.10.2-py2.py3-none-manylinux_2_28_x86_64.whl'
     ),
     (
-        'mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
-        '922983dfdf88d29f4eb0f451a1d18867156d9fc97e3df6e63b9933cc0eba4d38',
-        '2026-09-22T17:30:24.940590Z',
-        'https://files.pythonhosted.org/packages/4e/8e/1e50dc6db3c99a5a02642e253641bddef9b1b7c65527660baaae83eb3375/'
-        'mujoco-3.14.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
+        'mujoco-3.16.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl',
+        '9990aecfe442a516d0595e5762f89da83431ed46fd353bee1e135e3a7140a551',
+        '2026-10-14T10:31:19.055677Z',
+        'https://files.pythonhosted.org/packages/fa/54/9d5d12a5cf979e4cbb164fc00879dc9e5dbd9811186a0846be22243f973d/'
+        'mujoco-3.16.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl'
     ),
     (
         'pyopengl-3.1.10-py3-none-any.whl',

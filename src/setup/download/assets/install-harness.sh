@@ -6,11 +6,12 @@ python3 - "$bundle" <<'PY'
 
 The bundle holds the vendor distribution file plus an optional manifest.json of
 {"file", "sha256"} records, verified before anything is unpacked. A tar archive
-is unpacked, any other payload is copied in as a bare binary; the shell part
-then links the matching /opt/harness-deps closure so a Node entry resolves its
-dependencies.
+is unpacked, a gzip file is decompressed, and any other payload is copied in as
+a bare binary; the shell part then links the matching /opt/harness-deps closure
+so a Node entry resolves its dependencies.
 """
 
+import gzip
 import hashlib
 import json
 import shutil
@@ -96,15 +97,19 @@ def _extract_tar(archive: Path) -> None:
 
 
 def _install(bundle: Path) -> None:
-    """Verify the manifest, then unpack the distribution into TARGET."""
+    """Verify the manifest, then install the distribution into TARGET."""
     _verify_manifest(bundle)
     payload = _payload(bundle)
     TARGET.mkdir(parents=True, exist_ok=True)
     if payload.name.endswith(TAR_SUFFIXES):
         _extract_tar(payload)
     else:
-        destination = TARGET / payload.name
-        shutil.copyfile(payload, destination)
+        destination = TARGET / payload.name.removesuffix('.gz')
+        if payload.name.endswith('.gz'):
+            with gzip.open(payload, 'rb') as source, destination.open('wb') as output:
+                shutil.copyfileobj(source, output)
+        else:
+            shutil.copyfile(payload, destination)
         destination.chmod(COPY_MODE)
 
 

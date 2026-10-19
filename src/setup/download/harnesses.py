@@ -34,107 +34,107 @@ from setup.common import Blocked, download_material, fetch, Material, sha256
 MATERIALS: Final = (
     Material(
         'Antigravity CLI',
-        '1.2.11',
-        '2026-09-25T04:22:11Z',
-        'https://github.com/google-antigravity/antigravity-cli/releases/download/1.2.11/agy_cli_linux_x64.tar.gz',
-        'c91c62c5e6fa954f5a7e1d7b9ad417d749db4aa60a4ba0b3d604dec1b645d190',
-        'harnesses/antigravity-cli/1.2.11/agy_cli_linux_x64.tar.gz'
+        '1.3.6',
+        '2026-10-15T17:51:16Z',
+        'https://github.com/google-antigravity/antigravity-cli/releases/download/1.3.6/agy_cli_linux_x64.tar.gz',
+        'e88ed835cbc4af504f64dfe20175f5572dc2a425dbfa2fcf55c0358bb444d80c',
+        'harnesses/antigravity-cli/1.3.6/agy_cli_linux_x64.tar.gz'
     ),
     Material(
         'Claude Code',
-        '2.1.283',
-        '2026-09-25T18:49:30.967Z',
-        'https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.283.tgz',
-        'd14ec0fca400151092c926928fea7e8e38231f7a90e6e1f8eeb2a55c24676afb',
-        'harnesses/claude-code/2.1.283/claude-code-linux-x64-2.1.283.tgz'
+        '2.1.301',
+        '2026-10-15T14:37:15.820Z',
+        'https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.301.tgz',
+        'a7ffd61e7784e6dda864a31e934cececc050f106015201cb3db4abb59c781c57',
+        'harnesses/claude-code/2.1.301/claude-code-linux-x64-2.1.301.tgz'
     ),
     Material(
         'CodeBuddy Code',
-        '2.158.0',
-        '2026-09-24T14:09:51.432Z',
-        'https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.158.0.tgz',
-        '4396a3997906521fe3a8ead7059d61840025b664ca4f65ce6f205960a9f44e0e',
-        'harnesses/codebuddy-code/2.158.0/codebuddy-code-2.158.0.tgz'
+        '2.168.0',
+        '2026-10-15T16:00:42.366Z',
+        'https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.168.0.tgz',
+        'ec3ebfb69b8b4d0975f0e17aceca5a9aebe7b9b83e39cdd9e618cf3e3799517c',
+        'harnesses/codebuddy-code/2.168.0/codebuddy-code-2.168.0.tgz'
     ),
     Material(
         'Codex CLI',
-        '0.157.0',
-        '2026-09-25T02:31:06Z',
-        'https://github.com/openai/codex/releases/download/rust-v0.157.0/codex-package-x86_64-unknown-linux-musl.tar.gz',
-        '042f851ea3fc1083c45157520520944fc790632b53ebc580fc98eaca55862a25',
-        'harnesses/codex/0.157.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
+        '0.163.0',
+        '2026-10-15T21:30:38Z',
+        'https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-package-x86_64-unknown-linux-musl.tar.gz',
+        '582646c6bf0561eb0de540f7fc85b9121b0091a826bc6e96830b7f1722122182',
+        'harnesses/codex/0.163.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
     ),
     Material(
         'DeepSeek Harness',
-        '0.1.7-rc.2',
-        '2026-09-24T14:18:22Z',
-        'https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.1.7-rc.2.tgz',
-        '5f2da7272d9485abc223e681075809a8d929697c5232ee445718e1b7e066bff8',
-        'harnesses/deepseek-harness/0.1.7-rc.2/dsh-0.1.7-rc.2.tgz'
+        '0.2.0-rc.2',
+        '2026-09-29T09:56:27.792Z',
+        'https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.2.tgz',
+        'bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859',
+        'harnesses/deepseek-harness/0.2.0-rc.2/dsh-0.2.0-rc.2.tgz'
     ),
     Material(
         'Grok Build',
-        '1.0.41',
-        '2026-09-22T16:34:24Z',
-        'https://x.ai/cli/grok-1.0.41-linux-x86_64',
-        '9ce03ed23e16ea01072b4496263d6213a27899e1e3e107f008d36edf82e70407',
-        'harnesses/grok-build/1.0.41/grok-1.0.41-linux-x86_64'
+        '1.0.60',
+        'UNKNOWN',
+        'https://x.ai/cli/grok-1.0.60-linux-x86_64',
+        '10e6af64b24724fc1074c373e906b9ad121110044dddcbd97ad43c3a25f96d5f',
+        'harnesses/grok-build/1.0.60/grok-1.0.60-linux-x86_64'
     ),
     Material(
         'Kimi Code CLI',
-        '2.1.1',
-        '2026-09-24T07:27:15.480Z',
-        'https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.1.1.tgz',
-        '6690a29d7b5e14812754dd100136b7f4ee2577add8895f00fe27025b4412049f',
-        'harnesses/kimi-code/2.1.1/kimi-code-2.1.1.tgz'
+        '2.2.0',
+        '2026-10-14T15:35:26.375Z',
+        'https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.2.0.tgz',
+        'b7c21c0e4d17b480be9f2c890f14d769244003bf35c80d67f8139d74f5e4d960',
+        'harnesses/kimi-code/2.2.0/kimi-code-2.2.0.tgz'
     ),
     Material(
         'Kiro CLI',
-        '2.24.1',
-        '2026-09-25T02:20:13.596492Z',
-        'https://desktop-release.q.us-east-1.amazonaws.com/2.24.1/kirocli-x86_64-linux.tar.gz',
-        '9ddc94fe5d1c7530e14bf93b98e78b0bc74e3a36e14cfcf756373ba65ce41a2a',
-        'harnesses/kiro-cli/2.24.1/kirocli-x86_64-linux.tar.gz'
+        '2.31.1',
+        '2026-10-14T20:10:07Z',
+        'https://desktop-release.q.us-east-1.amazonaws.com/2.31.1/kirocli-x86_64-linux.tar.gz',
+        '22eef4c19c42782316b0e24cdd3399024760eec9056b4298751cb99f33795ace',
+        'harnesses/kiro-cli/2.31.1/kirocli-x86_64-linux.tar.gz'
     ),
     Material(
         'MiniMax Code',
-        '0.5.5',
-        '2026-09-25T16:49:11.277Z',
-        'https://registry.npmjs.org/@minimax-ai/code/-/code-0.5.5.tgz',
-        '1aee10f29045618d46fd37f341b4708f4ea3c0592cc35b8cb15f23671dbf0456',
-        'harnesses/minimax-code/0.5.5/minimax-code-0.5.5.tgz'
+        '0.6.12',
+        '2026-10-15T15:58:39.259Z',
+        'https://registry.npmjs.org/@minimax-ai/code/-/code-0.6.12.tgz',
+        'd8fa59dba7afc3d060367c1bd5b49fb45ed43f846687182e4fea2a1a1f293150',
+        'harnesses/minimax-code/0.6.12/minimax-code-0.6.12.tgz'
     ),
     Material(
         'Mistral Vibe',
-        '2.25.8',
-        '2026-09-23T15:29:18Z',
-        'https://github.com/mistralai/mistral-vibe/releases/download/v2.25.8/vibe-acp-linux-x86_64-2.25.8.tar.gz',
-        'dbe693ee66f29fdfcf9029dcbf3b2d4da138554b193e432b089840148ecf08b3',
-        'harnesses/mistral-vibe/2.25.8/vibe-acp-linux-x86_64-2.25.8.tar.gz'
+        '2.26.1',
+        '2026-10-09T14:56:56Z',
+        'https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-linux-x86_64-2.26.1.tar.gz',
+        'c8a018ca7d02eed5cebf291f6bcce1744e44323ff774b1c3fceac13794a95634',
+        'harnesses/mistral-vibe/2.26.1/vibe-acp-linux-x86_64-2.26.1.tar.gz'
     ),
     Material(
         'Muse Code',
-        '1.4.0-R4161.1',
+        '1.4.9-R6297.1',
         'UNKNOWN',
-        'https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=1.4.0-R4161.1&file=muse-x86-linux',
-        '1b68bd4518d53a2aaff063915df4d141b0a205e6d79038299d04e3a14e85a5b9',
-        'harnesses/muse-code/1.4.0-R4161.1/muse-x86-linux'
+        'https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=1.4.9-R6297.1&file=muse-x86-linux',
+        'a228010021276e112aa8422eb56ae82c0375405701950f6529bed4c9fe8abe05',
+        'harnesses/muse-code/1.4.9-R6297.1/muse-x86-linux'
     ),
     Material(
         'Qwen Code',
-        '0.24.5',
-        '2026-09-24T17:16:56.822Z',
-        'https://github.com/QwenLM/qwen-code/releases/download/v0.24.5/qwen-code-linux-x64.tar.gz',
-        '61490a0fe061d9fd539f238ef2b6a133ea203eeb1682f65b21b6af2c1c428869',
-        'harnesses/qwen-code/0.24.5/qwen-code-linux-x64.tar.gz'
+        '0.25.2',
+        '2026-10-15T15:41:15Z',
+        'https://github.com/QwenLM/qwen-code/releases/download/v0.25.2/qwen-code-linux-x64.tar.gz',
+        '24f5c5c9b56f0ac0abfdb0d4b2c5831f0e4ac8b0928b8e5e4fa445a705aee61b',
+        'harnesses/qwen-code/0.25.2/qwen-code-linux-x64.tar.gz'
     ),
     Material(
         'TRAE CLI',
-        '0.120.52',
-        'UNKNOWN',
-        'https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/trae-cli_0.120.52_linux_amd64.tar.gz',
-        'b92505d7ebfe1956387f4c9368bc66cfbdeb3b5e81ce773e2b0cbca2fb3e4c39',
-        'harnesses/trae-cli/0.120.52/trae-cli_0.120.52_linux_amd64.tar.gz'
+        '0.209.1',
+        '2026-10-10T06:56:03.726524Z',
+        'https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/v2/releases/0.209.1/traex-linux-x86_64.gz',
+        '643cf93b876e89ea5c72c87d3448b26690c6b71e45b3a7756b914d2ca53c1405',
+        'harnesses/trae-cli/0.209.1/traex-linux-x86_64.gz'
     ),
 )
 
@@ -142,7 +142,7 @@ BLOCKED: Final = (
     Blocked(
         'DeepSeek Harness',
         'https://github.com/deepseek-ai/deepseek-harness',
-        'no stable release was confirmed; the explicitly selected npm 0.1.7-rc.2 fallback is verified above and remains marked RC'
+        'no stable release was confirmed; the explicitly selected npm 0.2.0-rc.2 fallback is verified above and remains marked RC'
     ),
     Blocked(
         'ZCode CLI',

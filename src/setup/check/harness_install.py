@@ -70,12 +70,13 @@ def _entry_path(name: str, payload: str) -> str:
     return ENTRY_POINTS[name] or payload
 
 
-def _inspect(qga: QgaClient, entry: str) -> dict[str, object]:
+def _inspect(qga: QgaClient, name: str, entry: str) -> dict[str, object]:
     """
     Summarize the installed tree, then run the harness entry point.
 
     Args:
         `qga` (QgaClient): Guest agent client used to inspect the guest.
+        `name` (str): Harness name, used for runtime prerequisites.
         `entry` (str): Entry point path relative to /task/harness.
 
     Returns:
@@ -132,7 +133,7 @@ def _test_one(run_dir: Path, qga: QgaClient, harness_root: Path, installer: Path
     if cleared.exitcode != 0:
         raise MaterialCheckError(f'cannot clear {GUEST_HARNESS}')
     install_bundle(run_dir, qga, spec, directory, installer)
-    record.update(_inspect(qga, entry))
+    record.update(_inspect(qga, name, entry))
     probe = record['probe']
     if not record['entry_present']:
         record['verdict'] = VERDICT_ENTRY_MISSING

@@ -57,8 +57,8 @@ class BuildConfig:
         iso_sha256 (str | None): Official reference hash; the build fails on mismatch, None skips the check.
         out (Path): Output directory for base.qcow2, manifest.json, and the seed directory.
         accel (str): `kvm` or `tcg`.
-        smp (int): vCPU count for the build VMs.
-        memory (int): RAM in MiB for the build VMs.
+        cpus (int): vCPU count for the build VMs.
+        memory_mb (int): RAM in MiB for the build VMs.
         disk (str): Disk size passed to qemu-img create.
         skip_install (bool): Reuse an existing base.qcow2 and skip to verification.
     """
@@ -67,8 +67,8 @@ class BuildConfig:
     iso_sha256: str | None
     out: Path
     accel: str = 'kvm'
-    smp: int = 4
-    memory: int = 8192
+    cpus: int = 4
+    memory_mb: int = 8192
     disk: str = '64G'
     skip_install: bool = False
 
@@ -209,12 +209,12 @@ def _qemu_common(config: BuildConfig) -> list[str]:
     QEMU flags shared by the install and verification boots.
 
     Args:
-        `config` (BuildConfig): Build parameters supplying accel, CPU count, memory, and disk path.
+        `config` (BuildConfig): Build parameters supplying accel, CPU count, memory size, and disk path.
 
     Returns:
         `flags` (list[str]): QEMU command-line flags common to both boots.
     """
-    return machine_flags(config.accel, config.smp, config.memory, config.out / 'base.qcow2', config.out / 'qemu.pid')
+    return machine_flags(config.accel, config.cpus, config.memory_mb, config.out / 'base.qcow2', config.out / 'qemu.pid')
 
 
 def _check_prerequisites(config: BuildConfig) -> None:
@@ -720,8 +720,8 @@ def main() -> None:
     )
     parser.add_argument('--out', required=True, help='image directory name under materials_directory/images')
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM but the install takes hour-scale')
-    parser.add_argument('--smp', type=int, default=4)
-    parser.add_argument('--memory', type=int, default=8192)
+    parser.add_argument('--cpus', type=int, default=4)
+    parser.add_argument('--memory-mb', type=int, default=8192)
     parser.add_argument('--disk', default='64G')
     parser.add_argument('--skip-install', action='store_true', help='reuse the existing base.qcow2 and skip to verification')
     args = parser.parse_args()
@@ -735,8 +735,8 @@ def main() -> None:
         iso_sha256=args.iso_sha256,
         out=materials_directory / 'images' / args.out,
         accel=args.accel,
-        smp=args.smp,
-        memory=args.memory,
+        cpus=args.cpus,
+        memory_mb=args.memory_mb,
         disk=args.disk,
         skip_install=args.skip_install
     )

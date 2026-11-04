@@ -152,8 +152,8 @@ def check_tools(
     out_dir: Path,
     run_dir: Path,
     base_image: Path,
-    smp: int = 4,
-    memory: int = 8192,
+    cpus: int = 4,
+    memory_mb: int = 8192,
     accel: str = 'kvm',
     vnc: str | None = None,
     keep_vm: bool = False
@@ -166,8 +166,8 @@ def check_tools(
         `out_dir` (Path): Host directory receiving tool-install-report.json.
         `run_dir` (Path): VM run directory on local storage.
         `base_image` (Path): Frozen base qcow2 the overlay is created from; must be on local storage.
-        `smp` (int): Guest CPU count.
-        `memory` (int): RAM in MiB.
+        `cpus` (int): Guest CPU count.
+        `memory_mb` (int): RAM in MiB.
         `accel` (str): `kvm` or `tcg`.
         `vnc` (str | None): Optional VNC display such as `:5` to watch the guest desktop live.
         `keep_vm` (bool): Keep the run directory after the check.
@@ -189,7 +189,7 @@ def check_tools(
         'started_at': stamp()
     }
     try:
-        with offline_vm(base_image, run_dir, accel=accel, smp=smp, memory=memory, vnc=vnc, keep_vm=keep_vm) as qga:
+        with offline_vm(base_image, run_dir, accel=accel, cpus=cpus, memory_mb=memory_mb, vnc=vnc, keep_vm=keep_vm) as qga:
             for position, spec in enumerate(specs, start=1):
                 print(f'== tool {position}/{len(specs)}: {spec}', flush=True)
                 report['results'].append(_install_one(run_dir, qga, tools_root, spec))
@@ -218,8 +218,8 @@ def main() -> None:
         required=True,
         help='host directory receiving tool-install-report.json; keep it outside the configured output_directory'
     )
-    parser.add_argument('--smp', type=int, default=4)
-    parser.add_argument('--memory', type=int, default=8192)
+    parser.add_argument('--cpus', type=int, default=4)
+    parser.add_argument('--memory-mb', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
     parser.add_argument(
         '--vnc',
@@ -235,8 +235,8 @@ def main() -> None:
         args.output_dir,
         args.run_dir,
         discover_base_image(materials),
-        smp=args.smp,
-        memory=args.memory,
+        cpus=args.cpus,
+        memory_mb=args.memory_mb,
         accel=args.accel,
         vnc=args.vnc,
         keep_vm=args.keep_vm

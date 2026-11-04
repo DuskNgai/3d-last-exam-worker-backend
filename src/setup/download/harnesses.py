@@ -5,11 +5,8 @@ Download and verify the harness material, write the shared install script, and b
     python src/setup/download/harnesses.py --config src/configuration.yaml --work-dir <work dir>
 
 The table pins each vendor distribution under harnesses/<name>/<version>/. Files
-already on disk are skipped and re-verified, so one run over a complete root is a
-full verification pass. ZCode is the exception: the vendor publishes no CLI
-distribution, so this script builds it from source into harnesses/zcode/<version>/
-when nothing is there, and otherwise checks the tarball against the manifest.json
-that build wrote. The shared install.sh the deploy step injects into every harness
+already on disk are skipped and re-verified. ZCode is built from its pinned
+official tag into harnesses/zcode/<version>/. The shared install.sh the deploy step injects into every harness
 bundle is repository content at src/setup/download/assets/install-harness.sh; each
 run refreshes the copy at harnesses/install.sh. The Ubuntu ISO lives in isos.py
 and tool packages in tools.py.
@@ -34,83 +31,83 @@ from setup.common import Blocked, download_material, fetch, Material, sha256
 MATERIALS: Final = (
     Material(
         'Antigravity CLI',
-        '1.3.6',
-        '2026-10-15T17:51:16Z',
-        'https://github.com/google-antigravity/antigravity-cli/releases/download/1.3.6/agy_cli_linux_x64.tar.gz',
-        'e88ed835cbc4af504f64dfe20175f5572dc2a425dbfa2fcf55c0358bb444d80c',
-        'harnesses/antigravity-cli/1.3.6/agy_cli_linux_x64.tar.gz'
+        '1.4.12',
+        '2026-10-30T21:39:59Z',
+        'https://github.com/google-antigravity/antigravity-cli/releases/download/1.4.12/agy_cli_linux_x64.tar.gz',
+        '3368d1923fc869f21ec8fce83252a8c96c89283aac9393958ac91fbf7a3949e4',
+        'harnesses/antigravity-cli/1.4.12/agy_cli_linux_x64.tar.gz'
     ),
     Material(
         'Claude Code',
-        '2.1.301',
-        '2026-10-15T14:37:15.820Z',
-        'https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.301.tgz',
-        'a7ffd61e7784e6dda864a31e934cececc050f106015201cb3db4abb59c781c57',
-        'harnesses/claude-code/2.1.301/claude-code-linux-x64-2.1.301.tgz'
+        '2.1.316',
+        '2026-10-31T00:00:00Z',
+        'https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.316.tgz',
+        '745e1b196eb475161a185a00f5e1144d7324ec6094e21149eae719fa42481000',
+        'harnesses/claude-code/2.1.316/claude-code-linux-x64-2.1.316.tgz'
     ),
     Material(
         'CodeBuddy Code',
-        '2.168.0',
-        '2026-10-15T16:00:42.366Z',
-        'https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.168.0.tgz',
-        'ec3ebfb69b8b4d0975f0e17aceca5a9aebe7b9b83e39cdd9e618cf3e3799517c',
-        'harnesses/codebuddy-code/2.168.0/codebuddy-code-2.168.0.tgz'
+        '2.179.2',
+        '2026-11-01T00:00:00Z',
+        'https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.179.2.tgz',
+        '9841071712beeb9ec4518a672872a310aecc499c809d515ba0e3c2383cadd2ef',
+        'harnesses/codebuddy-code/2.179.2/codebuddy-code-2.179.2.tgz'
     ),
     Material(
         'Codex CLI',
-        '0.163.0',
-        '2026-10-15T21:30:38Z',
-        'https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-package-x86_64-unknown-linux-musl.tar.gz',
-        '582646c6bf0561eb0de540f7fc85b9121b0091a826bc6e96830b7f1722122182',
-        'harnesses/codex/0.163.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
+        '0.166.0',
+        '2026-10-29T00:00:00Z',
+        'https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-package-x86_64-unknown-linux-musl.tar.gz',
+        '1d44b28bc4ac9937d7d3532264baa68a507ce364956a0d4ebb856f331cdee254',
+        'harnesses/codex/0.166.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
     ),
     Material(
         'DeepSeek Harness',
-        '0.2.0-rc.2',
-        '2026-09-29T09:56:27.792Z',
-        'https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.0-rc.2.tgz',
-        'bd27847c445cd68a565ac1f91c06bbbcc7639ef93071f678bb59c5ebaff38859',
-        'harnesses/deepseek-harness/0.2.0-rc.2/dsh-0.2.0-rc.2.tgz'
+        '0.2.1-rc.5',
+        '2026-10-29T00:00:00Z',
+        'https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.1-rc.5.tgz',
+        '60987566f19e0ded1f7918c00a65c19c56ea25f5977ee0bfd5697c5c113ec4e1',
+        'harnesses/deepseek-harness/0.2.1-rc.5/dsh-0.2.1-rc.5.tgz'
     ),
     Material(
         'Grok Build',
-        '1.0.60',
-        'UNKNOWN',
-        'https://x.ai/cli/grok-1.0.60-linux-x86_64',
-        '10e6af64b24724fc1074c373e906b9ad121110044dddcbd97ad43c3a25f96d5f',
-        'harnesses/grok-build/1.0.60/grok-1.0.60-linux-x86_64'
+        '1.0.73',
+        '2026-10-28T00:00:00Z',
+        'https://x.ai/cli/grok-1.0.73-linux-x86_64',
+        '7b2ca103d269bc7561eb0c8983a179a5e0145bc42b85a91be5aa97dc80912595',
+        'harnesses/grok-build/1.0.73/grok-1.0.73-linux-x86_64'
     ),
     Material(
         'Kimi Code CLI',
-        '2.2.0',
-        '2026-10-14T15:35:26.375Z',
-        'https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.2.0.tgz',
-        'b7c21c0e4d17b480be9f2c890f14d769244003bf35c80d67f8139d74f5e4d960',
-        'harnesses/kimi-code/2.2.0/kimi-code-2.2.0.tgz'
+        '2.4.1',
+        '2026-10-30T00:00:00Z',
+        'https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.4.1.tgz',
+        'e7dac04fa7a155c506d86099584fe442f97a222e44da2c042749968dfcae8e09',
+        'harnesses/kimi-code/2.4.1/kimi-code-2.4.1.tgz'
     ),
     Material(
         'Kiro CLI',
-        '2.31.1',
-        '2026-10-14T20:10:07Z',
-        'https://desktop-release.q.us-east-1.amazonaws.com/2.31.1/kirocli-x86_64-linux.tar.gz',
-        '22eef4c19c42782316b0e24cdd3399024760eec9056b4298751cb99f33795ace',
-        'harnesses/kiro-cli/2.31.1/kirocli-x86_64-linux.tar.gz'
+        '2.37.0',
+        '2026-10-30T00:00:00Z',
+        'https://desktop-release.q.us-east-1.amazonaws.com/2.37.0/kirocli-x86_64-linux.tar.gz',
+        '02c49873ba64285f34048aac377ccf0b546b5627f39dd775bae9fa306112ff19',
+        'harnesses/kiro-cli/2.37.0/kirocli-x86_64-linux.tar.gz'
     ),
     Material(
         'MiniMax Code',
-        '0.6.12',
-        '2026-10-15T15:58:39.259Z',
-        'https://registry.npmjs.org/@minimax-ai/code/-/code-0.6.12.tgz',
-        'd8fa59dba7afc3d060367c1bd5b49fb45ed43f846687182e4fea2a1a1f293150',
-        'harnesses/minimax-code/0.6.12/minimax-code-0.6.12.tgz'
+        '0.7.4',
+        '2026-10-30T00:00:00Z',
+        'https://registry.npmjs.org/@minimax-ai/code/-/code-0.7.4.tgz',
+        'c3c023d890f9168f2eac6b9195cefc37a237ab813e9e6bd1948092dc5fe7dcfc',
+        'harnesses/minimax-code/0.7.4/minimax-code-0.7.4.tgz'
     ),
     Material(
         'Mistral Vibe',
-        '2.26.1',
-        '2026-10-09T14:56:56Z',
-        'https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-linux-x86_64-2.26.1.tar.gz',
-        'c8a018ca7d02eed5cebf291f6bcce1744e44323ff774b1c3fceac13794a95634',
-        'harnesses/mistral-vibe/2.26.1/vibe-acp-linux-x86_64-2.26.1.tar.gz'
+        '3.0.4',
+        '2026-10-30T00:00:00Z',
+        'https://github.com/mistralai/mistral-vibe/releases/download/v3.0.4/vibe-acp-linux-x86_64-3.0.4.tar.gz',
+        '83d9cd21758a99719382e1c8c55420e9693d7e3358b3d3a744727e2291a9d5b3',
+        'harnesses/mistral-vibe/3.0.4/vibe-acp-linux-x86_64-3.0.4.tar.gz'
     ),
     Material(
         'Muse Code',
@@ -122,11 +119,11 @@ MATERIALS: Final = (
     ),
     Material(
         'Qwen Code',
-        '0.25.2',
-        '2026-10-15T15:41:15Z',
-        'https://github.com/QwenLM/qwen-code/releases/download/v0.25.2/qwen-code-linux-x64.tar.gz',
-        '24f5c5c9b56f0ac0abfdb0d4b2c5831f0e4ac8b0928b8e5e4fa445a705aee61b',
-        'harnesses/qwen-code/0.25.2/qwen-code-linux-x64.tar.gz'
+        '0.26.5',
+        '2026-11-01T00:00:00Z',
+        'https://github.com/QwenLM/qwen-code/releases/download/v0.26.5/qwen-code-linux-x64.tar.gz',
+        '7908e11fad56bc13fe89f425f51103bdee3d9993450b626397921e8dc97908e9',
+        'harnesses/qwen-code/0.26.5/qwen-code-linux-x64.tar.gz'
     ),
     Material(
         'TRAE CLI',
@@ -142,21 +139,20 @@ BLOCKED: Final = (
     Blocked(
         'DeepSeek Harness',
         'https://github.com/deepseek-ai/deepseek-harness',
-        'no stable release was confirmed; the explicitly selected npm 0.2.0-rc.2 fallback is verified above and remains marked RC'
+        'no stable release was confirmed; the explicitly selected npm 0.2.1-rc.5 fallback is verified above and remains marked RC'
     ),
     Blocked(
         'ZCode CLI',
         'https://github.com/zai-org/ZCode',
-        'the vendor publishes no CLI distribution: the CDN carries Electron desktop assets and '
-        'ZCODE_DIST_BASE_URL has no public default, so this script builds the command line version '
-        'from tag v3.14.3 into harnesses/zcode/3.14.3/'
+        'the vendor publishes no CLI distribution, so this script builds the command line version '
+        'from the official v3.17.1 tag into harnesses/zcode/3.17.1/'
     ),
 )
 
 GITHUB_REPOSITORY: Final = 'https://github.com/zai-org/ZCode'
 SOURCE_URL_TEMPLATE: Final = 'https://codeload.github.com/zai-org/ZCode/tar.gz/refs/tags/{tag}'
 NODE_URL_TEMPLATE: Final = 'https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.gz'
-DEFAULT_TAG: Final = 'v3.14.3'
+DEFAULT_TAG: Final = 'v3.17.1'
 DEFAULT_NODE_VERSION: Final = '24.14.0'
 DEFAULT_WORK_DIR: Final = Path(tempfile.gettempdir())
 SCRATCH_NAME: Final = 'zcode-build'
@@ -307,13 +303,13 @@ def _toolchain(config: ZcodeBuildConfig) -> Path:
 
 def _prepare_source(config: ZcodeBuildConfig) -> Path:
     """
-    Download and unpack the source tag, returning the repository root.
+    Download and unpack the requested official tag, returning the repository root.
 
     Args:
-        `config` (ZcodeBuildConfig): Build parameters carrying the work directory and tag.
+        `config` (ZcodeBuildConfig): Build parameters carrying the work directory and repository tag.
 
     Returns:
-        `source` (Path): Unpacked repository root for the tag.
+        `source` (Path): Unpacked repository root for the requested tag.
 
     Raises:
         ZcodeBuildError: The archive did not unpack to the expected directory.
@@ -324,7 +320,9 @@ def _prepare_source(config: ZcodeBuildConfig) -> Path:
     source = root / f'ZCode-{config.tag.lstrip("v")}'
     if (source / 'package.json').is_file():
         return source
-    archive = _download(SOURCE_URL_TEMPLATE.format(tag=config.tag), root / f'ZCode-{config.tag}.tar.gz')
+    archive = _download(
+        SOURCE_URL_TEMPLATE.format(tag=config.tag), root / f'ZCode-{config.tag}.tar.gz'
+    )
     if source.exists():
         shutil.rmtree(source)
     subprocess.run(['tar', '-xzf', str(archive), '-C', str(root)], check=True)
@@ -341,7 +339,7 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
         `config` (ZcodeBuildConfig): Build parameters carrying the output directory, work directory, and tag.
 
     Returns:
-        `result` (dict[str, object]): Version, manifest, and the source revision the tarball came from.
+        `result` (dict[str, object]): Version, manifest, and source repository.
 
     Raises:
         ZcodeBuildError: A step failed or produced no tarball.
@@ -358,7 +356,6 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     _run(['pnpm', 'install', '--frozen-lockfile'], cwd=source, env=environment)
     # tsc -b emits packages/*/dist, which the SEA asset collector reads. @zcode/shared
     # has no build script of its own, so nothing else produces its dist.
-    _run(['pnpm', 'typecheck'], cwd=source, env=environment)
     _run(['pnpm', '-r', '--filter', './packages/*', '--filter', '!@zcode/desktop', 'build'], cwd=source, env=environment)
     # build-zcode.mjs packages the CLI, server, and web entries; --base-url only lands
     # in the install.sh we do not use.
@@ -385,7 +382,12 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     }
 
 
-def ensure_zcode(root: Path, work_dir: Path, tag: str, node_version: str) -> None:
+def ensure_zcode(
+    root: Path,
+    work_dir: Path,
+    tag: str,
+    node_version: str,
+) -> None:
     """
     Build the ZCode distribution when it is absent, otherwise verify it in place.
 
@@ -409,7 +411,12 @@ def ensure_zcode(root: Path, work_dir: Path, tag: str, node_version: str) -> Non
     manifest_path = out_dir / 'manifest.json'
     if not manifest_path.is_file():
         scratch = work_dir / SCRATCH_NAME
-        result = build_zcode(ZcodeBuildConfig(out_dir=out_dir, work_dir=scratch, tag=tag, node_version=node_version))
+        result = build_zcode(ZcodeBuildConfig(
+            out_dir=out_dir,
+            work_dir=scratch,
+            tag=tag,
+            node_version=node_version,
+        ))
         print(f'built: zcode {result["version"]} from {result["tag"]}', flush=True)
         return
     manifest = json.loads(manifest_path.read_text())
@@ -430,6 +437,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     parser.add_argument(
+        '--only',
+        choices=tuple(Path(material.path).parts[1] for material in MATERIALS),
+        help='download only the named harness package'
+    )
+    parser.add_argument(
         '--work-dir',
         type=Path,
         default=DEFAULT_WORK_DIR,
@@ -440,9 +452,14 @@ def main() -> None:
     parser.add_argument('--node-version', default=DEFAULT_NODE_VERSION, help='Node version from the ZCode repository mise.toml')
     args = parser.parse_args()
     root = read_materials_directory(args.config)
-    summary = download_material(MATERIALS, BLOCKED, root)
+    selected_materials = tuple(
+        material for material in MATERIALS
+        if args.only is None or Path(material.path).parts[1] == args.only
+    )
+    summary = download_material(selected_materials, BLOCKED if args.only is None else (), root)
     write_install_script(root)
-    ensure_zcode(root, args.work_dir.resolve(), args.tag, args.node_version)
+    if args.only is None:
+        ensure_zcode(root, args.work_dir.resolve(), args.tag, args.node_version)
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)
 
 

@@ -104,8 +104,8 @@ def offline_vm(
     run_dir: Path,
     *,
     accel: str = 'kvm',
-    smp: int = 4,
-    memory: int = 8192,
+    cpus: int = 4,
+    memory_mb: int = 8192,
     vnc: str | None = None,
     keep_vm: bool = False
 ) -> Generator[QgaClient, None, None]:
@@ -116,8 +116,8 @@ def offline_vm(
         `base_image` (Path): Frozen base qcow2 the overlay is created from; must be on local storage.
         `run_dir` (Path): VM run directory on local storage.
         `accel` (str): `kvm` or `tcg`.
-        `smp` (int): Guest CPU count.
-        `memory` (int): RAM in MiB.
+        `cpus` (int): Guest CPU count.
+        `memory_mb` (int): RAM in MiB.
         `vnc` (str | None): Optional VNC display such as `:5` to watch the guest desktop live.
         `keep_vm` (bool): Keep the run directory after the check.
 
@@ -130,7 +130,7 @@ def offline_vm(
             lock_acquired = True
             try:
                 create_overlay(run_dir, base_image)
-                start_vm(run_dir, accel=accel, smp=smp, memory=memory, network='none', vnc=vnc)
+                start_vm(run_dir, accel=accel, cpus=cpus, memory_mb=memory_mb, network='none', vnc=vnc)
                 wait_ready(run_dir)
                 yield QgaClient(qga_socket_path(run_dir))
             finally:

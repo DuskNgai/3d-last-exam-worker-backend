@@ -1,6 +1,6 @@
 """Deployment package: VM lifecycle, guest file writes, bundle deployment, agent runs."""
 
-from .agent_config import AgentConfig, AgentConfigError, load_agent_config
+from .agent_config import AgentConfig, AgentConfigurationError, load_agent_config
 from .credentials import CredentialsError, find_profile, KeyProfile, load_keys
 from .deploy import BundleConfig, DeployError, install_bundles, parse_spec
 from .guest import GuestError, write_file
@@ -16,11 +16,12 @@ from .qemu_vm import (
     VmError,
     wait_ready,
 )
-from .run_agent import AgentRunError, run_agent
+from .run_agent import AgentRun, AgentRunError, run_agent
 
 __all__ = [
     'AgentConfig',
-    'AgentConfigError',
+    'AgentConfigurationError',
+    'AgentRun',
     'AgentRunError',
     'BundleConfig',
     'CredentialsError',

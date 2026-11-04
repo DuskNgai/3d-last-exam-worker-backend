@@ -22,7 +22,7 @@ from typing import Final
 
 from configuration import read_materials_directory
 
-CUTOFF_UTC: Final = '2026-10-15T23:59:59+00:00'
+CUTOFF_UTC: Final = '2026-11-01T23:59:59+00:00'
 PARTIAL_SUFFIX: Final = '.part'
 RETRY_COUNT: Final = 3
 CONNECT_TIMEOUT_SECONDS: Final = 20

@@ -14,7 +14,7 @@ from typing import Final
 FIELDS: Final = ('provider', 'model', 'effort', 'harness')
 
 
-class AgentConfigError(RuntimeError):
+class AgentConfigurationError(RuntimeError):
     """The agent configuration is unreadable, incomplete, or carries a field the runner does not know."""
 
 
@@ -39,21 +39,21 @@ def load_agent_config(path: Path) -> AgentConfig:
         `config` (AgentConfig): The parsed configuration.
 
     Raises:
-        AgentConfigError: The file is missing, is not a JSON object, misses a field, holds an empty or non-string
+        AgentConfigurationError: The file is missing, is not a JSON object, misses a field, holds an empty or non-string
             field, or carries an unknown field.
     """
     if not path.is_file():
-        raise AgentConfigError(f'agent config not found: {path}')
+        raise AgentConfigurationError(f'agent config not found: {path}')
     try:
         data = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as error:
-        raise AgentConfigError(f'cannot read {path}: {error}') from error
+        raise AgentConfigurationError(f'cannot read {path}: {error}') from error
     if not isinstance(data, dict):
-        raise AgentConfigError(f'{path} must hold an object with {list(FIELDS)}')
+        raise AgentConfigurationError(f'{path} must hold an object with {list(FIELDS)}')
     unknown = sorted(set(data) - set(FIELDS))
     if unknown:
-        raise AgentConfigError(f'{path} holds fields the run does not know: {unknown}')
+        raise AgentConfigurationError(f'{path} holds fields the run does not know: {unknown}')
     missing = [field for field in FIELDS if not isinstance(data.get(field), str) or not data.get(field)]
     if missing:
-        raise AgentConfigError(f'{path} must hold non-empty {missing}')
+        raise AgentConfigurationError(f'{path} must hold non-empty {missing}')
     return AgentConfig(provider=data['provider'], model=data['model'], effort=data['effort'], harness=data['harness'])

@@ -12,14 +12,14 @@ from typing import Final
 MACHINE_TYPE: Final = 'q35'
 
 
-def machine_flags(accel: str, smp: int, memory: int, disk: Path, pidfile: Path) -> list[str]:
+def machine_flags(accel: str, cpus: int, memory_mb: int, disk: Path, pidfile: Path) -> list[str]:
     """
     Return the flags describing the machine itself, ending with the daemonize request.
 
     Args:
         `accel` (str): `kvm` or `tcg`; it also selects the CPU model.
-        `smp` (int): vCPU count.
-        `memory` (int): RAM in MiB.
+        `cpus` (int): vCPU count.
+        `memory_mb` (int): RAM in MiB.
         `disk` (Path): qcow2 image attached as the virtio system disk.
         `pidfile` (Path): File QEMU writes its pid into once it is daemonized.
 
@@ -34,9 +34,9 @@ def machine_flags(accel: str, smp: int, memory: int, disk: Path, pidfile: Path) 
         '-cpu',
         'host' if accel == 'kvm' else 'max',
         '-smp',
-        str(smp),
+        str(cpus),
         '-m',
-        str(memory),
+        str(memory_mb),
         '-drive',
         f'file={disk},if=virtio,format=qcow2',
         '-device',

@@ -5,7 +5,7 @@ Every run lives in its own run directory on local storage. All paths passed to
 QEMU are absolute because `-daemonize` changes the working directory to `/`.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 import contextlib
 import fcntl
 import json
@@ -124,12 +124,19 @@ def create_overlay(run_dir: Path, base_image: Path) -> Path:
     return overlay
 
 
-def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, network: str, vnc: str | None,
-                        relay_command: str | None) -> list[str]:
+def _build_qemu_command(
+    run_dir: Path,
+    accel: str,
+    cpus: int,
+    memory_mb: int,
+    network: str,
+    vnc: str | None,
+    relay_command: str | None,
+) -> list[str]:
     """Assemble the QEMU command line for a run directory."""
     run_dir = run_dir.resolve()
     command = ['qemu-system-x86_64']
-    command += machine_flags(accel, smp, memory, overlay_path(run_dir), run_dir / PIDFILE_NAME)
+    command += machine_flags(accel, cpus, memory_mb, overlay_path(run_dir), run_dir / PIDFILE_NAME)
     command += [
         '-chardev',
         f'socket,path={qga_socket_path(run_dir)},server=on,wait=off,id=qga0',
@@ -163,21 +170,21 @@ def _build_qemu_command(run_dir: Path, accel: str, smp: int, memory: int, networ
 
 def start_vm(
     run_dir: Path,
+    cpus: int,
+    memory_mb: int,
     accel: str = 'kvm',
-    smp: int = 4,
-    memory: int = 16384,
     network: str = 'gateway',
     vnc: str | None = None,
-    relay_command: str | None = None
+    relay_command: str | None = None,
 ) -> int:
     """
     Start a daemonized QEMU for an existing run directory overlay.
 
     Args:
         `run_dir` (Path): Run directory holding the overlay.
+        `cpus` (int): Number of virtual CPUs.
+        `memory_mb` (int): RAM in MiB.
         `accel` (str): `kvm` or `tcg`.
-        `smp` (int): Number of virtual CPUs.
-        `memory` (int): RAM in MiB.
         `network` (str): `none`, `nat`, or `gateway`; gateway isolates the guest with restrict=on
             and, when relay_command is given, forwards one address to it, spawned per guest connection.
         `vnc` (str | None): Optional VNC display such as `:5` for debugging; a bare `:5` is pinned to
@@ -198,7 +205,7 @@ def start_vm(
         raise VmError(f'VM already running in {run_dir}')
     for stale in (qga_socket_path(run_dir), qmp_socket_path(run_dir)):
         stale.unlink(missing_ok=True)
-    command = _build_qemu_command(run_dir, accel, smp, memory, network, vnc, relay_command)
+    command = _build_qemu_command(run_dir, accel, cpus, memory_mb, network, vnc, relay_command)
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.returncode != 0:
         raise VmError(f'QEMU failed to start: {result.stderr.strip()}')
@@ -207,8 +214,8 @@ def start_vm(
         raise VmError('QEMU daemonized but no pidfile appeared')
     config = {
         'accel': accel,
-        'smp': smp,
-        'memory': memory,
+        'cpus': cpus,
+        'memory_mb': memory_mb,
         'network': network,
         'vnc': vnc,
         'relay_command': relay_command,
@@ -247,13 +254,18 @@ def read_pid(run_dir: Path, wait: bool = False) -> int | None:
         time.sleep(0.5)
 
 
-def wait_ready(run_dir: Path, timeout: float = READY_TIMEOUT_SECONDS) -> None:
+def wait_ready(
+    run_dir: Path,
+    timeout: float = READY_TIMEOUT_SECONDS,
+    cancel_requested: Callable[[], bool] | None = None,
+) -> None:
     """
     Block until the guest agent answers or the timeout expires.
 
     Args:
         `run_dir` (Path): Run directory holding the QGA socket.
         `timeout` (float): Seconds to wait for the guest agent.
+        `cancel_requested` (Callable[[], bool] | None): Whether the run was cancelled.
 
     Raises:
         VmError: The VM died or the guest agent never came up.
@@ -262,6 +274,8 @@ def wait_ready(run_dir: Path, timeout: float = READY_TIMEOUT_SECONDS) -> None:
     qga = QgaClient(qga_socket_path(run_dir))
     deadline = time.monotonic() + timeout
     while True:
+        if cancel_requested is not None and cancel_requested():
+            raise VmError('VM startup was cancelled')
         if read_pid(run_dir) is None:
             raise VmError(f'QEMU exited while waiting for the guest agent; see {run_dir / SERIAL_LOG_NAME}')
         try:
@@ -271,7 +285,7 @@ def wait_ready(run_dir: Path, timeout: float = READY_TIMEOUT_SECONDS) -> None:
             pass
         if time.monotonic() > deadline:
             raise VmError(f'Guest agent not ready after {timeout}s; see {run_dir / SERIAL_LOG_NAME}')
-        time.sleep(2.0)
+        time.sleep(0.5)
 
 
 def _wait_dead(run_dir: Path, seconds: float) -> bool:

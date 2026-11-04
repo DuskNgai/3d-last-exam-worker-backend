@@ -33,7 +33,7 @@ from setup.common import (
 )
 
 from sandbox.deploy.deploy import parse_spec
-from sandbox.deploy.harness import distribution_dir, ENTRY_POINTS, install_script, NON_PAYLOAD_NAMES
+from sandbox.deploy.harness import distribution_dir, HARNESSES, install_script, NON_PAYLOAD_NAMES
 from sandbox.qga import QgaClient
 
 GUEST_HARNESS: Final = '/task/harness'
@@ -67,7 +67,7 @@ def _probe(qga: QgaClient, target: str) -> dict[str, object]:
 
 def _entry_path(name: str, payload: str) -> str:
     """Return what to run inside /task/harness: the declared entry, or the bare payload itself."""
-    return ENTRY_POINTS[name] or payload
+    return HARNESSES[name].entry or payload
 
 
 def _inspect(qga: QgaClient, name: str, entry: str) -> dict[str, object]:
@@ -149,8 +149,8 @@ def check_harnesses(
     out_dir: Path,
     run_dir: Path,
     base_image: Path,
-    smp: int = 4,
-    memory: int = 8192,
+    cpus: int = 4,
+    memory_mb: int = 8192,
     accel: str = 'kvm',
     vnc: str | None = None,
     keep_vm: bool = False
@@ -164,8 +164,8 @@ def check_harnesses(
         `out_dir` (Path): Host directory receiving harness-install-report.json.
         `run_dir` (Path): VM run directory on local storage.
         `base_image` (Path): Frozen base qcow2 the overlay is created from; must be on local storage.
-        `smp` (int): Guest CPU count.
-        `memory` (int): RAM in MiB.
+        `cpus` (int): Guest CPU count.
+        `memory_mb` (int): RAM in MiB.
         `accel` (str): `kvm` or `tcg`.
         `vnc` (str | None): Optional VNC display such as `:5` to watch the guest desktop live.
         `keep_vm` (bool): Keep the run directory after the test.
@@ -181,8 +181,8 @@ def check_harnesses(
         raise MaterialCheckError('at least one harness is required')
     for spec in specs:
         name, _ = parse_spec(spec)
-        if name not in ENTRY_POINTS:
-            raise MaterialCheckError(f'{name} has no declared entry point; add it to harness.ENTRY_POINTS')
+        if name not in HARNESSES:
+            raise MaterialCheckError(f'{name} has no declared entry point; add it to harness.HARNESSES')
     installer = install_script(harness_root)
     out_dir.mkdir(parents=True, exist_ok=True)
     report: dict[str, object] = {
@@ -194,7 +194,7 @@ def check_harnesses(
         'started_at': stamp()
     }
     try:
-        with offline_vm(base_image, run_dir, accel=accel, smp=smp, memory=memory, vnc=vnc, keep_vm=keep_vm) as qga:
+        with offline_vm(base_image, run_dir, accel=accel, cpus=cpus, memory_mb=memory_mb, vnc=vnc, keep_vm=keep_vm) as qga:
             for position, spec in enumerate(specs, start=1):
                 print(f'== harness {position}/{len(specs)}: {spec}', flush=True)
                 report['results'].append(_test_one(run_dir, qga, harness_root, installer, spec))
@@ -221,8 +221,8 @@ def main() -> None:
         required=True,
         help='host directory receiving harness-install-report.json; keep it outside the configured output_directory'
     )
-    parser.add_argument('--smp', type=int, default=4)
-    parser.add_argument('--memory', type=int, default=8192)
+    parser.add_argument('--cpus', type=int, default=4)
+    parser.add_argument('--memory-mb', type=int, default=8192)
     parser.add_argument('--accel', choices=['kvm', 'tcg'], default='kvm', help='tcg works without KVM at a large slowdown')
     parser.add_argument(
         '--vnc',
@@ -238,8 +238,8 @@ def main() -> None:
         args.output_dir,
         args.run_dir,
         discover_base_image(materials),
-        smp=args.smp,
-        memory=args.memory,
+        cpus=args.cpus,
+        memory_mb=args.memory_mb,
         accel=args.accel,
         vnc=args.vnc,
         keep_vm=args.keep_vm

@@ -26,7 +26,7 @@ from typing import Final
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from configuration import read_materials_directory
-from setup.common import Blocked, download_material, fetch, Material, sha256
+from setup.common import download_material, fetch, Material, sha256
 
 MATERIALS: Final = (
     Material(
@@ -40,7 +40,7 @@ MATERIALS: Final = (
     Material(
         'Claude Code',
         '2.1.316',
-        '2026-10-31T00:00:00Z',
+        '2026-10-31T00:43:17.200Z',
         'https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.316.tgz',
         '745e1b196eb475161a185a00f5e1144d7324ec6094e21149eae719fa42481000',
         'harnesses/claude-code/2.1.316/claude-code-linux-x64-2.1.316.tgz'
@@ -48,7 +48,7 @@ MATERIALS: Final = (
     Material(
         'CodeBuddy Code',
         '2.179.2',
-        '2026-11-01T00:00:00Z',
+        '2026-11-01T18:42:02.089Z',
         'https://registry.npmjs.org/@tencent-ai/codebuddy-code/-/codebuddy-code-2.179.2.tgz',
         '9841071712beeb9ec4518a672872a310aecc499c809d515ba0e3c2383cadd2ef',
         'harnesses/codebuddy-code/2.179.2/codebuddy-code-2.179.2.tgz'
@@ -56,7 +56,7 @@ MATERIALS: Final = (
     Material(
         'Codex CLI',
         '0.166.0',
-        '2026-10-29T00:00:00Z',
+        '2026-10-29T19:47:53Z',
         'https://github.com/openai/codex/releases/download/rust-v0.166.0/codex-package-x86_64-unknown-linux-musl.tar.gz',
         '1d44b28bc4ac9937d7d3532264baa68a507ce364956a0d4ebb856f331cdee254',
         'harnesses/codex/0.166.0/codex-package-x86_64-unknown-linux-musl.tar.gz'
@@ -64,7 +64,7 @@ MATERIALS: Final = (
     Material(
         'DeepSeek Harness',
         '0.2.1-rc.5',
-        '2026-10-29T00:00:00Z',
+        '2026-10-29T14:15:23.355Z',
         'https://registry.npmjs.org/@deepseek-ai/dsh/-/dsh-0.2.1-rc.5.tgz',
         '60987566f19e0ded1f7918c00a65c19c56ea25f5977ee0bfd5697c5c113ec4e1',
         'harnesses/deepseek-harness/0.2.1-rc.5/dsh-0.2.1-rc.5.tgz'
@@ -72,7 +72,7 @@ MATERIALS: Final = (
     Material(
         'Grok Build',
         '1.0.73',
-        '2026-10-28T00:00:00Z',
+        '2026-10-28T15:57:31Z',
         'https://x.ai/cli/grok-1.0.73-linux-x86_64',
         '7b2ca103d269bc7561eb0c8983a179a5e0145bc42b85a91be5aa97dc80912595',
         'harnesses/grok-build/1.0.73/grok-1.0.73-linux-x86_64'
@@ -80,7 +80,7 @@ MATERIALS: Final = (
     Material(
         'Kimi Code CLI',
         '2.4.1',
-        '2026-10-30T00:00:00Z',
+        '2026-10-30T09:55:26.630Z',
         'https://registry.npmjs.org/@moonshot-ai/kimi-code/-/kimi-code-2.4.1.tgz',
         'e7dac04fa7a155c506d86099584fe442f97a222e44da2c042749968dfcae8e09',
         'harnesses/kimi-code/2.4.1/kimi-code-2.4.1.tgz'
@@ -88,7 +88,7 @@ MATERIALS: Final = (
     Material(
         'Kiro CLI',
         '2.37.0',
-        '2026-10-30T00:00:00Z',
+        '2026-10-30T20:55:44Z',
         'https://desktop-release.q.us-east-1.amazonaws.com/2.37.0/kirocli-x86_64-linux.tar.gz',
         '02c49873ba64285f34048aac377ccf0b546b5627f39dd775bae9fa306112ff19',
         'harnesses/kiro-cli/2.37.0/kirocli-x86_64-linux.tar.gz'
@@ -96,7 +96,7 @@ MATERIALS: Final = (
     Material(
         'MiniMax Code',
         '0.7.4',
-        '2026-10-30T00:00:00Z',
+        '2026-10-30T22:19:09.410Z',
         'https://registry.npmjs.org/@minimax-ai/code/-/code-0.7.4.tgz',
         'c3c023d890f9168f2eac6b9195cefc37a237ab813e9e6bd1948092dc5fe7dcfc',
         'harnesses/minimax-code/0.7.4/minimax-code-0.7.4.tgz'
@@ -104,48 +104,34 @@ MATERIALS: Final = (
     Material(
         'Mistral Vibe',
         '3.0.4',
-        '2026-10-30T00:00:00Z',
+        '2026-10-30T11:03:02Z',
         'https://github.com/mistralai/mistral-vibe/releases/download/v3.0.4/vibe-acp-linux-x86_64-3.0.4.tar.gz',
         '83d9cd21758a99719382e1c8c55420e9693d7e3358b3d3a744727e2291a9d5b3',
         'harnesses/mistral-vibe/3.0.4/vibe-acp-linux-x86_64-3.0.4.tar.gz'
     ),
     Material(
         'Muse Code',
-        '1.4.9-R6297.1',
-        'UNKNOWN',
-        'https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=1.4.9-R6297.1&file=muse-x86-linux',
-        'a228010021276e112aa8422eb56ae82c0375405701950f6529bed4c9fe8abe05',
-        'harnesses/muse-code/1.4.9-R6297.1/muse-x86-linux'
+        '1.4.14-R7309.1',
+        '2026-10-27T18:35:10Z',
+        'https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=1.4.14-R7309.1&file=muse-x86-linux',
+        '0809aac7cb58d18f5022b6d05e02aa1974683c0ec430e5f04d25b60ed17de2da',
+        'harnesses/muse-code/1.4.14-R7309.1/muse-x86-linux'
     ),
     Material(
         'Qwen Code',
         '0.26.5',
-        '2026-11-01T00:00:00Z',
+        '2026-11-01T03:22:50Z',
         'https://github.com/QwenLM/qwen-code/releases/download/v0.26.5/qwen-code-linux-x64.tar.gz',
         '7908e11fad56bc13fe89f425f51103bdee3d9993450b626397921e8dc97908e9',
         'harnesses/qwen-code/0.26.5/qwen-code-linux-x64.tar.gz'
     ),
     Material(
         'TRAE CLI',
-        '0.209.1',
-        '2026-10-10T06:56:03.726524Z',
-        'https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/v2/releases/0.209.1/traex-linux-x86_64.gz',
-        '643cf93b876e89ea5c72c87d3448b26690c6b71e45b3a7756b914d2ca53c1405',
-        'harnesses/trae-cli/0.209.1/traex-linux-x86_64.gz'
-    ),
-)
-
-BLOCKED: Final = (
-    Blocked(
-        'DeepSeek Harness',
-        'https://github.com/deepseek-ai/deepseek-harness',
-        'no stable release was confirmed; the explicitly selected npm 0.2.1-rc.5 fallback is verified above and remains marked RC'
-    ),
-    Blocked(
-        'ZCode CLI',
-        'https://github.com/zai-org/ZCode',
-        'the vendor publishes no CLI distribution, so this script builds the command line version '
-        'from the official v3.17.1 tag into harnesses/zcode/3.17.1/'
+        '0.213.1',
+        '2026-10-30T08:48:23Z',
+        'https://lf-cdn.trae.com.cn/obj/trae-com-cn/trae-cli/v2/releases/0.213.1/traex-linux-x86_64.gz',
+        '877864882cd7130891803ba4eb31b20ce414a8d3422cd3c223bc06f57de53b22',
+        'harnesses/trae-cli/0.213.1/traex-linux-x86_64.gz'
     ),
 )
 
@@ -354,12 +340,8 @@ def build_zcode(config: ZcodeBuildConfig) -> dict[str, object]:
     _run(['corepack', 'enable', '--install-directory', str(bin_dir)], cwd=source, env=environment)
     _run(['corepack', 'prepare', f'pnpm@{PNPM_VERSION}', '--activate'], cwd=source, env=environment)
     _run(['pnpm', 'install', '--frozen-lockfile'], cwd=source, env=environment)
-    # tsc -b emits packages/*/dist, which the SEA asset collector reads. @zcode/shared
-    # has no build script of its own, so nothing else produces its dist.
-    _run(['pnpm', '-r', '--filter', './packages/*', '--filter', '!@zcode/desktop', 'build'], cwd=source, env=environment)
-    # build-zcode.mjs packages the CLI, server, and web entries; --base-url only lands
-    # in the install.sh we do not use.
-    _run(['node', 'scripts/build-zcode.mjs', '--base-url', DIST_BASE_URL_PLACEHOLDER], cwd=source, env=environment)
+    _run(['pnpm', 'exec', 'tsc', '-b', 'packages/shared'], cwd=source, env=environment)
+    _run(['pnpm', 'run', 'build:zcode', '--base-url', DIST_BASE_URL_PLACEHOLDER], cwd=source, env=environment)
     version = json.loads((source / 'package.json').read_text())['version']
     tarball = source / 'dist' / PACKAGE_NAME / 'releases' / version / f'{PACKAGE_NAME}-{version}.tar.gz'
     if not tarball.is_file():
@@ -456,7 +438,7 @@ def main() -> None:
         material for material in MATERIALS
         if args.only is None or Path(material.path).parts[1] == args.only
     )
-    summary = download_material(selected_materials, BLOCKED if args.only is None else (), root)
+    summary = download_material(selected_materials, root)
     write_install_script(root)
     if args.only is None:
         ensure_zcode(root, args.work_dir.resolve(), args.tag, args.node_version)

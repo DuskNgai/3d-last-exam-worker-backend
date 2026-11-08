@@ -7,8 +7,6 @@ root, so the same table fills both the shared store and a local copy.
 
 Nothing is extracted, installed, or replaced. Each entry pins a URL, a sha256,
 and a release time, and a release published after the frozen cutoff is refused.
-Packages deliberately not archived are listed in the table's BLOCKED with the
-reason, so a rerun cannot quietly substitute another source.
 """
 
 import argparse
@@ -52,22 +50,6 @@ class Material:
     url: str
     sha256: str
     path: str
-
-
-@dataclass(frozen=True)
-class Blocked:
-    """
-    A package deliberately not downloaded.
-
-    Attributes:
-        label (str): Human-readable package name.
-        source (str): Where it would have come from.
-        reason (str): Why it is not archived at this root.
-    """
-
-    label: str
-    source: str
-    reason: str
 
 
 def _timestamp(value: str) -> datetime.datetime:
@@ -198,13 +180,12 @@ def _verify(material: Material, destination: Path) -> None:
     subprocess.run(['file', str(destination)], check=True)
 
 
-def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...], root: Path) -> dict[str, int]:
+def download_material(table: tuple[Material, ...], root: Path) -> dict[str, int]:
     """
     Download and verify every material in one table under root.
 
     Args:
         `table` (tuple[Material, ...]): Pinned materials to fetch and verify.
-        `blocked` (tuple[Blocked, ...]): Packages deliberately not archived, reported and skipped.
         `root` (Path): Material root the table paths are relative to.
 
     Returns:
@@ -228,18 +209,15 @@ def download_material(table: tuple[Material, ...], blocked: tuple[Blocked, ...],
         moved = _fetch(material, destination)
         _verify(material, destination)
         summary['downloaded' if moved else 'existing'] += 1
-    for record in blocked:
-        print(f'blocked: {record.label}\n  source: {record.source}\n  reason: {record.reason}', file=sys.stderr, flush=True)
     return summary
 
 
-def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: str) -> None:
+def run(table: tuple[Material, ...], description: str) -> None:
     """
     Read the configured materials directory and run one table.
 
     Args:
         `table` (tuple[Material, ...]): Pinned materials to fetch and verify.
-        `blocked` (tuple[Blocked, ...]): Packages deliberately not archived, reported and skipped.
         `description` (str): Description shown in the --help output.
 
     Raises:
@@ -251,5 +229,5 @@ def run(table: tuple[Material, ...], blocked: tuple[Blocked, ...], description: 
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--config', type=Path, required=True, help='Worker configuration file')
     args = parser.parse_args()
-    summary = download_material(table, blocked, read_materials_directory(args.config))
+    summary = download_material(table, read_materials_directory(args.config))
     print(f'done: {summary["downloaded"]} downloaded, {summary["existing"]} already present', flush=True)

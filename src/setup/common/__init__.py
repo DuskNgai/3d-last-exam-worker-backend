@@ -4,7 +4,7 @@
 `material_check` owns the offline VM, bundle upload, and command probing shared by the two install checks.
 """
 
-from .material import Blocked, download_material, fetch, Material, MaterialError, run, sha256
+from .material import download_material, fetch, Material, MaterialError, run, sha256
 from .material_check import (
     discover_base_image,
     discover_specs,
@@ -18,7 +18,6 @@ from .material_check import (
 )
 
 __all__ = [
-    'Blocked',
     'Material',
     'MaterialCheckError',
     'MaterialError',

@@ -49,7 +49,7 @@ def main() -> None:
     for module in (isos, harnesses, tools):
         module_tables = module.tables() if hasattr(module, 'tables') else (module.MATERIALS,)
         for table in module_tables:
-            summary = download_material(table, module.BLOCKED, root)
+            summary = download_material(table, root)
             downloaded += summary['downloaded']
             existing += summary['existing']
     harnesses.write_install_script(root)

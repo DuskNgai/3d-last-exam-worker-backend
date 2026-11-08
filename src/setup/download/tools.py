@@ -179,10 +179,6 @@ MUJOCO_WHEELS: Final = (
     ),
 )
 
-# No tool in the frozen set is deliberately unarchived, so this table carries no blocked records.
-BLOCKED: Final = ()
-
-
 def _wheel_table(rows: tuple[tuple[str, str, str, str], ...], directory: str) -> tuple[Material, ...]:
     """
     Build Material rows for one wheels closure.
@@ -244,8 +240,8 @@ def main() -> None:
     root = read_materials_directory(args.config)
     downloaded = 0
     existing = 0
-    for position, table in enumerate(tables()):
-        summary = download_material(table, BLOCKED if position == 0 else (), root)
+    for table in tables():
+        summary = download_material(table, root)
         downloaded += summary['downloaded']
         existing += summary['existing']
     write_install_scripts(root)

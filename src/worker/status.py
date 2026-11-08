@@ -76,8 +76,8 @@ class AttemptState:
 
     @property
     def is_verification_unfinished(self) -> bool:
-        """Whether the verification has not reached a terminal status."""
-        return self.verification_status in VERIFICATION_UNFINISHED
+        """Whether a dispatched verification has not reached a terminal status."""
+        return self.verification_dispatched and self.verification_status in VERIFICATION_UNFINISHED
 
     @property
     def is_unfinished(self) -> bool:

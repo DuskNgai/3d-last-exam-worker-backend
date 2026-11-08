@@ -28,8 +28,5 @@ MATERIALS: Final = (
     ),
 )
 
-# Every image in the frozen set is downloadable, so this table carries no blocked records.
-BLOCKED: Final = ()
-
 if __name__ == '__main__':
-    run(MATERIALS, BLOCKED, 'Download and verify the ISO the base image is built from.')
+    run(MATERIALS, 'Download and verify the ISO the base image is built from.')
